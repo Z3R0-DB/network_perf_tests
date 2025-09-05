@@ -24,6 +24,40 @@ log() {
   fi
 }
 
+# Run iperf with retries. Args: output_file -- followed by iperf args (without -J)
+run_iperf() {
+  local outfile="$1"; shift
+  local tmpfile="${outfile}.tmp"
+  local max_attempts=5
+  local attempt=1
+  while true; do
+    log "Running iperf (attempt ${attempt}/${max_attempts}) -> ${outfile}"
+    # run iperf and capture JSON to a temp file
+    "$IPERF" "$@" -J > "$tmpfile" 2>&1 || true
+
+    # quick sanity: file should exist and not contain an "error" key
+    if [[ -s "$tmpfile" ]]; then
+      if grep -q '"error"' "$tmpfile" 2>/dev/null; then
+        log "iperf returned error (attempt ${attempt}): $(grep -m1 '"error"' "$tmpfile" | sed -n '1p')"
+      else
+        mv "$tmpfile" "$outfile"
+        return 0
+      fi
+    else
+      log "iperf produced empty output (attempt ${attempt})"
+    fi
+
+    # retry logic
+    if [[ $attempt -ge $max_attempts ]]; then
+      log "iperf failed after ${attempt} attempts; saving last output to ${outfile}"
+      mv "$tmpfile" "$outfile" 2>/dev/null || true
+      return 1
+    fi
+    attempt=$((attempt+1))
+    sleep 1
+  done
+}
+
 # parse args
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -143,22 +177,22 @@ echo "Starting iperf tests..."
 
 # --- TCP Download (reverse) ---
 log "Starting TCP download (reverse) test"
-"$IPERF" -c "$SERVER" -R -t "$DURATION" -J > "${OUTDIR}/iperf_${TESTID}_${TS}_tcp_dl.json" 2>&1 || true
+run_iperf "${OUTDIR}/iperf_${TESTID}_${TS}_tcp_dl.json" -c "$SERVER" -R -t "$DURATION"
 log "TCP download test finished: ${OUTDIR}/iperf_${TESTID}_${TS}_tcp_dl.json"
 
 # --- TCP Upload ---
 log "Starting TCP upload test"
-"$IPERF" -c "$SERVER" -t "$DURATION" -J > "${OUTDIR}/iperf_${TESTID}_${TS}_tcp_ul.json" 2>&1 || true
+run_iperf "${OUTDIR}/iperf_${TESTID}_${TS}_tcp_ul.json" -c "$SERVER" -t "$DURATION"
 log "TCP upload test finished: ${OUTDIR}/iperf_${TESTID}_${TS}_tcp_ul.json"
 
 # --- UDP Download (reverse) ---
 log "Starting UDP download (reverse) test @ ${UDP_M} Mbps"
-"$IPERF" -c "$SERVER" -u -b "${UDP_M}M" -R -t "$DURATION" -J > "${OUTDIR}/iperf_${TESTID}_${TS}_udp_dl.json" 2>&1 || true
+run_iperf "${OUTDIR}/iperf_${TESTID}_${TS}_udp_dl.json" -c "$SERVER" -u -b "${UDP_M}M" -R -t "$DURATION"
 log "UDP download test finished: ${OUTDIR}/iperf_${TESTID}_${TS}_udp_dl.json"
 
 # --- UDP Upload ---
 log "Starting UDP upload test @ ${UDP_M} Mbps"
-"$IPERF" -c "$SERVER" -u -b "${UDP_M}M" -t "$DURATION" -J > "${OUTDIR}/iperf_${TESTID}_${TS}_udp_ul.json" 2>&1 || true
+run_iperf "${OUTDIR}/iperf_${TESTID}_${TS}_udp_ul.json" -c "$SERVER" -u -b "${UDP_M}M" -t "$DURATION"
 log "UDP upload test finished: ${OUTDIR}/iperf_${TESTID}_${TS}_udp_ul.json"
 
 # --- ICMP pings to gateway and WAN target ---
