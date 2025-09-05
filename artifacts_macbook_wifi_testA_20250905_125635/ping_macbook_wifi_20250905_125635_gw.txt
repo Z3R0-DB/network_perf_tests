@@ -1,0 +1,303 @@
+ping: sendto: No route to host
+ping: sendto: No route to host
+PING 100.64.0.1 (100.64.0.1): 56 data bytes
+Request timeout for icmp_seq 0
+ping: sendto: No route to host
+Request timeout for icmp_seq 1
+ping: sendto: No route to host
+Request timeout for icmp_seq 2
+ping: sendto: No route to host
+Request timeout for icmp_seq 3
+ping: sendto: No route to host
+Request timeout for icmp_seq 4
+ping: sendto: No route to host
+Request timeout for icmp_seq 5
+ping: sendto: No route to host
+Request timeout for icmp_seq 6
+ping: sendto: No route to host
+Request timeout for icmp_seq 7
+ping: sendto: No route to host
+Request timeout for icmp_seq 8
+ping: sendto: No route to host
+Request timeout for icmp_seq 9
+ping: sendto: No route to host
+Request timeout for icmp_seq 10
+ping: sendto: No route to host
+Request timeout for icmp_seq 11
+ping: sendto: No route to host
+Request timeout for icmp_seq 12
+ping: sendto: No route to host
+Request timeout for icmp_seq 13
+ping: sendto: No route to host
+Request timeout for icmp_seq 14
+ping: sendto: No route to host
+Request timeout for icmp_seq 15
+ping: sendto: No route to host
+Request timeout for icmp_seq 16
+ping: sendto: No route to host
+Request timeout for icmp_seq 17
+ping: sendto: No route to host
+Request timeout for icmp_seq 18
+ping: sendto: No route to host
+Request timeout for icmp_seq 19
+ping: sendto: No route to host
+Request timeout for icmp_seq 20
+ping: sendto: No route to host
+Request timeout for icmp_seq 21
+ping: sendto: No route to host
+Request timeout for icmp_seq 22
+ping: sendto: No route to host
+Request timeout for icmp_seq 23
+ping: sendto: No route to host
+Request timeout for icmp_seq 24
+ping: sendto: No route to host
+Request timeout for icmp_seq 25
+ping: sendto: No route to host
+Request timeout for icmp_seq 26
+ping: sendto: No route to host
+Request timeout for icmp_seq 27
+ping: sendto: No route to host
+Request timeout for icmp_seq 28
+ping: sendto: No route to host
+Request timeout for icmp_seq 29
+ping: sendto: No route to host
+Request timeout for icmp_seq 30
+ping: sendto: No route to host
+Request timeout for icmp_seq 31
+ping: sendto: No route to host
+Request timeout for icmp_seq 32
+ping: sendto: No route to host
+Request timeout for icmp_seq 33
+ping: sendto: No route to host
+Request timeout for icmp_seq 34
+ping: sendto: No route to host
+Request timeout for icmp_seq 35
+ping: sendto: No route to host
+Request timeout for icmp_seq 36
+ping: sendto: No route to host
+Request timeout for icmp_seq 37
+ping: sendto: No route to host
+Request timeout for icmp_seq 38
+ping: sendto: No route to host
+Request timeout for icmp_seq 39
+ping: sendto: No route to host
+Request timeout for icmp_seq 40
+ping: sendto: No route to host
+Request timeout for icmp_seq 41
+ping: sendto: No route to host
+Request timeout for icmp_seq 42
+ping: sendto: No route to host
+Request timeout for icmp_seq 43
+ping: sendto: No route to host
+Request timeout for icmp_seq 44
+ping: sendto: No route to host
+Request timeout for icmp_seq 45
+ping: sendto: No route to host
+Request timeout for icmp_seq 46
+ping: sendto: No route to host
+Request timeout for icmp_seq 47
+ping: sendto: No route to host
+Request timeout for icmp_seq 48
+ping: sendto: No route to host
+Request timeout for icmp_seq 49
+ping: sendto: No route to host
+Request timeout for icmp_seq 50
+ping: sendto: No route to host
+Request timeout for icmp_seq 51
+ping: sendto: No route to host
+Request timeout for icmp_seq 52
+ping: sendto: No route to host
+Request timeout for icmp_seq 53
+ping: sendto: No route to host
+Request timeout for icmp_seq 54
+ping: sendto: No route to host
+Request timeout for icmp_seq 55
+ping: sendto: No route to host
+Request timeout for icmp_seq 56
+ping: sendto: No route to host
+Request timeout for icmp_seq 57
+ping: sendto: No route to host
+Request timeout for icmp_seq 58
+ping: sendto: No route to host
+Request timeout for icmp_seq 59
+ping: sendto: No route to host
+Request timeout for icmp_seq 60
+ping: sendto: No route to host
+Request timeout for icmp_seq 61
+ping: sendto: No route to host
+Request timeout for icmp_seq 62
+ping: sendto: No route to host
+Request timeout for icmp_seq 63
+ping: sendto: No route to host
+Request timeout for icmp_seq 64
+ping: sendto: No route to host
+Request timeout for icmp_seq 65
+ping: sendto: No route to host
+Request timeout for icmp_seq 66
+ping: sendto: No route to host
+Request timeout for icmp_seq 67
+ping: sendto: No route to host
+Request timeout for icmp_seq 68
+ping: sendto: No route to host
+Request timeout for icmp_seq 69
+ping: sendto: No route to host
+Request timeout for icmp_seq 70
+ping: sendto: No route to host
+Request timeout for icmp_seq 71
+ping: sendto: No route to host
+Request timeout for icmp_seq 72
+ping: sendto: No route to host
+Request timeout for icmp_seq 73
+ping: sendto: No route to host
+Request timeout for icmp_seq 74
+ping: sendto: No route to host
+Request timeout for icmp_seq 75
+ping: sendto: No route to host
+Request timeout for icmp_seq 76
+ping: sendto: No route to host
+Request timeout for icmp_seq 77
+ping: sendto: No route to host
+Request timeout for icmp_seq 78
+ping: sendto: No route to host
+Request timeout for icmp_seq 79
+ping: sendto: No route to host
+Request timeout for icmp_seq 80
+ping: sendto: No route to host
+Request timeout for icmp_seq 81
+ping: sendto: No route to host
+Request timeout for icmp_seq 82
+ping: sendto: No route to host
+Request timeout for icmp_seq 83
+ping: sendto: No route to host
+Request timeout for icmp_seq 84
+ping: sendto: No route to host
+Request timeout for icmp_seq 85
+ping: sendto: No route to host
+Request timeout for icmp_seq 86
+ping: sendto: No route to host
+Request timeout for icmp_seq 87
+ping: sendto: No route to host
+Request timeout for icmp_seq 88
+ping: sendto: No route to host
+Request timeout for icmp_seq 89
+ping: sendto: No route to host
+Request timeout for icmp_seq 90
+ping: sendto: No route to host
+Request timeout for icmp_seq 91
+ping: sendto: No route to host
+Request timeout for icmp_seq 92
+ping: sendto: No route to host
+Request timeout for icmp_seq 93
+ping: sendto: No route to host
+Request timeout for icmp_seq 94
+ping: sendto: No route to host
+Request timeout for icmp_seq 95
+ping: sendto: No route to host
+Request timeout for icmp_seq 96
+ping: sendto: No route to host
+Request timeout for icmp_seq 97
+ping: sendto: No route to host
+Request timeout for icmp_seq 98
+ping: sendto: No route to host
+Request timeout for icmp_seq 99
+ping: sendto: No route to host
+Request timeout for icmp_seq 100
+ping: sendto: No route to host
+Request timeout for icmp_seq 101
+ping: sendto: No route to host
+Request timeout for icmp_seq 102
+ping: sendto: No route to host
+Request timeout for icmp_seq 103
+ping: sendto: No route to host
+Request timeout for icmp_seq 104
+ping: sendto: No route to host
+Request timeout for icmp_seq 105
+ping: sendto: No route to host
+Request timeout for icmp_seq 106
+ping: sendto: No route to host
+Request timeout for icmp_seq 107
+ping: sendto: No route to host
+Request timeout for icmp_seq 108
+ping: sendto: No route to host
+Request timeout for icmp_seq 109
+ping: sendto: No route to host
+Request timeout for icmp_seq 110
+ping: sendto: No route to host
+Request timeout for icmp_seq 111
+ping: sendto: No route to host
+Request timeout for icmp_seq 112
+ping: sendto: No route to host
+Request timeout for icmp_seq 113
+ping: sendto: No route to host
+Request timeout for icmp_seq 114
+ping: sendto: No route to host
+Request timeout for icmp_seq 115
+ping: sendto: No route to host
+Request timeout for icmp_seq 116
+ping: sendto: No route to host
+Request timeout for icmp_seq 117
+ping: sendto: No route to host
+Request timeout for icmp_seq 118
+ping: sendto: No route to host
+Request timeout for icmp_seq 119
+ping: sendto: No route to host
+Request timeout for icmp_seq 120
+ping: sendto: No route to host
+Request timeout for icmp_seq 121
+ping: sendto: No route to host
+Request timeout for icmp_seq 122
+ping: sendto: No route to host
+Request timeout for icmp_seq 123
+ping: sendto: No route to host
+Request timeout for icmp_seq 124
+ping: sendto: No route to host
+Request timeout for icmp_seq 125
+ping: sendto: No route to host
+Request timeout for icmp_seq 126
+ping: sendto: No route to host
+Request timeout for icmp_seq 127
+ping: sendto: No route to host
+Request timeout for icmp_seq 128
+ping: sendto: No route to host
+Request timeout for icmp_seq 129
+ping: sendto: No route to host
+Request timeout for icmp_seq 130
+ping: sendto: No route to host
+Request timeout for icmp_seq 131
+ping: sendto: No route to host
+Request timeout for icmp_seq 132
+ping: sendto: No route to host
+Request timeout for icmp_seq 133
+ping: sendto: No route to host
+Request timeout for icmp_seq 134
+ping: sendto: No route to host
+Request timeout for icmp_seq 135
+ping: sendto: No route to host
+Request timeout for icmp_seq 136
+ping: sendto: No route to host
+Request timeout for icmp_seq 137
+ping: sendto: No route to host
+Request timeout for icmp_seq 138
+ping: sendto: No route to host
+Request timeout for icmp_seq 139
+ping: sendto: No route to host
+Request timeout for icmp_seq 140
+ping: sendto: No route to host
+Request timeout for icmp_seq 141
+ping: sendto: No route to host
+Request timeout for icmp_seq 142
+ping: sendto: No route to host
+Request timeout for icmp_seq 143
+ping: sendto: No route to host
+Request timeout for icmp_seq 144
+ping: sendto: No route to host
+Request timeout for icmp_seq 145
+ping: sendto: No route to host
+Request timeout for icmp_seq 146
+ping: sendto: No route to host
+Request timeout for icmp_seq 147
+ping: sendto: No route to host
+Request timeout for icmp_seq 148
+
+--- 100.64.0.1 ping statistics ---
+150 packets transmitted, 0 packets received, 100.0% packet loss

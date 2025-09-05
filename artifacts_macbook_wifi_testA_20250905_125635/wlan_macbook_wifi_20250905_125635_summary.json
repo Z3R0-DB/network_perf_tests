@@ -1,0 +1,12 @@
+{
+  "timestamp": "20250905_125635",
+  "test_id": "macbook_wifi",
+  "ssid": "",
+  "bssid": "",
+  "rssi": null,
+  "noise": null,
+  "snr": null,
+  "signal_percent": null,
+  "last_tx_rate_mbps": "",
+  "channel": ""
+}
