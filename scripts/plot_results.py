@@ -1,24 +1,31 @@
 #!/usr/bin/env python3
-"""Aggregate artifacts from wifi runs and produce comparison tables and plots.
+"""Robust artifact analyzer for network_perf_tests.
 
-Usage: python3 scripts/plot_results.py --artifacts-root . --outdir analysis_output
+Usage:
+    python3 scripts/plot_results.py --artifacts-root results --outdir results/analysis_output --open-report
 
-It looks for directories named artifacts_* and extracts:
- - iperf JSON (tcp/udp ul/dl)
+Searches for artifact directories named `artifacts_*` under --artifacts-root and extracts:
+ - iperf JSON outputs (tcp/udp dl/ul)
  - wlan summary JSON
  - ping outputs (gw, wan)
 
-Outputs a CSV summary and PNG plots comparing metrics across runs.
+Produces:
+ - CSV summary at {outdir}/summary.csv
+ - combined PNG plots and a self-contained HTML report (report.html)
 """
+from __future__ import annotations
 import argparse
+import base64
 import glob
 import json
 import os
-import re
+import webbrowser
+from pathlib import Path
 from statistics import mean, stdev
+import re
 
-import numpy as np
 import pandas as pd
+import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
 
@@ -192,6 +199,7 @@ def analyze_artifacts(root):
 
 def plot_summary(df, outdir):
     os.makedirs(outdir, exist_ok=True)
+    images = []
     # clean test label
     df = df.copy()
     df['label'] = df.apply(lambda r: r.get('test_id') or os.path.basename(r['artifact_dir']), axis=1)
@@ -225,6 +233,13 @@ def plot_summary(df, outdir):
     plt.savefig(bw_png)
     plt.close()
     print(f"Wrote plot: {bw_png}")
+    # embed
+    try:
+        with open(bw_png, 'rb') as f:
+            b64 = base64.b64encode(f.read()).decode('ascii')
+            images.append(('Bandwidth comparison (Mbps)', bw_png, b64))
+    except Exception:
+        pass
 
     # RSSI / Signal
     if 'rssi' in df.columns or 'signal_percent' in df.columns:
@@ -243,6 +258,12 @@ def plot_summary(df, outdir):
         plt.savefig(rssi_png)
         plt.close()
         print(f"Wrote plot: {rssi_png}")
+        try:
+            with open(rssi_png, 'rb') as f:
+                b64 = base64.b64encode(f.read()).decode('ascii')
+                images.append(('RSSI / Signal', rssi_png, b64))
+        except Exception:
+            pass
 
     # Latency comparison
     lat_cols = [c for c in ['ping_gw_mean_ms', 'ping_wan_mean_ms'] if c in df.columns]
@@ -257,6 +278,12 @@ def plot_summary(df, outdir):
         plt.savefig(lat_png)
         plt.close()
         print(f"Wrote plot: {lat_png}")
+        try:
+            with open(lat_png, 'rb') as f:
+                b64 = base64.b64encode(f.read()).decode('ascii')
+                images.append(('Latency comparison (ms)', lat_png, b64))
+        except Exception:
+            pass
 
         # Jitter comparison
         jitter_cols = [c for c in ['tcp_dl_jitter_ms', 'tcp_ul_jitter_ms', 'udp_dl_jitter_ms', 'udp_ul_jitter_ms'] if c in df.columns]
@@ -271,6 +298,12 @@ def plot_summary(df, outdir):
             plt.savefig(jit_png)
             plt.close()
             print(f"Wrote plot: {jit_png}")
+            try:
+                with open(jit_png, 'rb') as f:
+                    b64 = base64.b64encode(f.read()).decode('ascii')
+                    images.append(('Jitter comparison (ms)', jit_png, b64))
+            except Exception:
+                pass
 
         # Packet loss comparison
         loss_cols = [c for c in ['tcp_dl_packet_loss_pct', 'tcp_ul_packet_loss_pct', 'udp_dl_packet_loss_pct', 'udp_ul_packet_loss_pct'] if c in df.columns]
@@ -285,21 +318,136 @@ def plot_summary(df, outdir):
             plt.savefig(loss_png)
             plt.close()
             print(f"Wrote plot: {loss_png}")
+            try:
+                with open(loss_png, 'rb') as f:
+                    b64 = base64.b64encode(f.read()).decode('ascii')
+                    images.append(('Packet loss comparison (%)', loss_png, b64))
+            except Exception:
+                pass
 
     print('Plots generated.')
+    # Build a prettier HTML report with summary cards and comparison table
+    try:
+        html_path = os.path.join(outdir, 'report.html')
+        title = 'Network Performance Report'
+        css = '''
+        body{font-family:Inter,Arial,Helvetica,sans-serif;margin:20px;color:#222}
+        h1{font-size:24px;margin-bottom:8px}
+        .row{display:flex;flex-wrap:wrap;gap:12px;margin-bottom:18px}
+        .card{background:#fff;border:1px solid #e6e6e6;padding:12px;border-radius:6px;box-shadow:0 1px 2px rgba(0,0,0,0.04)}
+        .card.small{flex:0 0 180px}
+        .card.large{flex:1 1 600px}
+        .card h4{margin:0 0 6px 0;font-size:13px;color:#666}
+        table{border-collapse:collapse;width:100%;margin-top:8px}
+        th,td{border:1px solid #eee;padding:8px;text-align:left}
+        th{background:#fafafa}
+        img.plotimg{max-width:100%;height:auto;border:1px solid #ddd;padding:6px;border-radius:4px}
+        .metric{font-weight:700;font-size:18px}
+        '''
+
+        # choose a baseline run (first non-empty test_id or first row)
+        baseline_idx = 0
+        if 'test_id' in df.columns and df['test_id'].notna().any():
+            baseline_idx = df.index[df['test_id'].notna()][0]
+
+        metrics_for_cards = ['tcp_dl_mbps', 'tcp_ul_mbps', 'udp_dl_mbps', 'udp_ul_mbps', 'rssi', 'snr', 'ping_wan_mean_ms']
+
+        with open(html_path, 'w') as h:
+            h.write(f'<!doctype html><html><head><meta charset="utf-8"><title>{title}</title>')
+            h.write(f'<style>{css}</style>')
+            h.write('</head><body>')
+            h.write(f'<h1>{title}</h1>')
+
+            # Summary cards for each run
+            h.write('<div class="row">')
+            for _, r in df.iterrows():
+                label = r.get('test_id') or os.path.basename(r['artifact_dir'])
+                h.write('<div class="card small">')
+                h.write(f'<h4>{label}</h4>')
+                for m in metrics_for_cards:
+                    val = r.get(m)
+                    display = '' if val is None or (isinstance(val, float) and pd.isna(val)) else (f'{val:.2f}' if isinstance(val, float) else str(val))
+                    h.write(f'<div><span class="metric">{display}</span> <small style="color:#666">{m}</small></div>')
+                h.write('</div>')
+            h.write('</div>')
+
+            # Embedded plots in two-column layout
+            h.write('<div class="row">')
+            for title_img, path, b64 in images:
+                h.write('<div class="card large">')
+                h.write(f'<h4>{title_img}</h4>')
+                h.write(f'<img class="plotimg" src="data:image/png;base64,{b64}" alt="{title_img}"/>')
+                h.write(f'<p style="font-size:12px;color:#888">Source: {os.path.basename(path)}</p>')
+                h.write('</div>')
+            h.write('</div>')
+
+            # Full summary table
+            h.write('<h2>Summary table</h2>')
+            try:
+                h.write(df.to_html(index=False, na_rep=''))
+            except Exception:
+                h.write('<p>Unable to render table.</p>')
+
+            # Comparison section: percent change vs baseline
+            h.write('<h2>Comparison vs baseline</h2>')
+            try:
+                comp_metrics = [c for c in ['tcp_dl_mbps', 'tcp_ul_mbps', 'udp_dl_mbps', 'udp_ul_mbps', 'rssi', 'snr', 'ping_wan_mean_ms'] if c in df.columns]
+                if comp_metrics and len(df) > 1:
+                    base = df.loc[baseline_idx, comp_metrics].astype(float)
+                    h.write('<table>')
+                    # header
+                    h.write('<tr><th>metric</th>')
+                    for _, r in df.iterrows():
+                        h.write(f'<th>{r.get("test_id") or os.path.basename(r["artifact_dir"])}</th>')
+                    h.write('</tr>')
+                    for m in comp_metrics:
+                        h.write(f'<tr><td>{m}</td>')
+                        for _, r in df.iterrows():
+                            v = r.get(m)
+                            try:
+                                vnum = float(v)
+                                b = float(base[m]) if not pd.isna(base[m]) else None
+                                if b is None or b == 0 or pd.isna(b):
+                                    h.write(f'<td>{vnum:.2f}</td>')
+                                else:
+                                    pct = (vnum - b) / b * 100.0
+                                    h.write(f'<td>{vnum:.2f} <small style="color:#666">({pct:+.1f}%)</small></td>')
+                            except Exception:
+                                h.write(f'<td>{v}</td>')
+                        h.write('</tr>')
+                    h.write('</table>')
+                else:
+                    h.write('<p>Not enough runs to compare.</p>')
+            except Exception as e:
+                h.write(f'<p>Comparison failed: {e}</p>')
+
+            h.write('<p style="color:#666">Generated by plot_results.py</p>')
+            h.write('</body></html>')
+
+        print(f'Wrote HTML report: {html_path}')
+    except Exception as e:
+        print('Failed to write HTML report:', e)
+    return html_path, images
 
 
 def main():
     p = argparse.ArgumentParser()
     p.add_argument('--artifacts-root', default='.', help='Root folder to search for artifacts_* dirs')
     p.add_argument('--outdir', default='analysis_output', help='Where to write CSV and plots')
+    p.add_argument('--open-report', action='store_true', help='Open the generated HTML report in the default browser')
     args = p.parse_args()
 
     df = analyze_artifacts(args.artifacts_root)
     if df.empty:
         print('No artifact directories found. Run the tests first and point --artifacts-root to the folder containing artifacts_* dirs.')
         return
-    plot_summary(df, args.outdir)
+    html_path, images = plot_summary(df, args.outdir)
+    if args.open_report and html_path:
+        try:
+            webbrowser.open('file://' + os.path.abspath(html_path))
+            print('Opened report in default browser')
+        except Exception as e:
+            print('Failed to open report:', e)
 
 
 if __name__ == '__main__':

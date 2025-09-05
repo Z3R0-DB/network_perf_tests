@@ -51,10 +51,12 @@ if [[ -z "$IPERF" ]]; then
 fi
 
 TS=$(date +%Y%m%d_%H%M%S)
+BASE_RESULTS_DIR="results"
+mkdir -p "$BASE_RESULTS_DIR"
 if [[ -n "$RUN_NAME" ]]; then
-  OUTDIR="artifacts_${TESTID}_${RUN_NAME}_${TS}"
+  OUTDIR="${BASE_RESULTS_DIR}/artifacts_${TESTID}_${RUN_NAME}_${TS}"
 else
-  OUTDIR="artifacts_${TESTID}_${TS}"
+  OUTDIR="${BASE_RESULTS_DIR}/artifacts_${TESTID}_${TS}"
 fi
 mkdir -p "$OUTDIR"
 
@@ -185,12 +187,12 @@ fi
 if [[ $AUTO_PLOT -eq 1 ]]; then
   log "Auto-plot enabled: running analysis script"
   # prefer venv/python in repo, fall back to system
-  if command -v python3 >/dev/null 2>&1; then
+    if command -v python3 >/dev/null 2>&1; then
     # try both relative locations
     if [[ -f "scripts/plot_results.py" ]]; then
-      python3 scripts/plot_results.py --artifacts-root . --outdir analysis_output || log "plot_results.py failed"
+      python3 scripts/plot_results.py --artifacts-root ${BASE_RESULTS_DIR} --outdir ${BASE_RESULTS_DIR}/analysis_output --open-report || log "plot_results.py failed"
     elif [[ -f "../scripts/plot_results.py" ]]; then
-      python3 ../scripts/plot_results.py --artifacts-root . --outdir analysis_output || log "plot_results.py failed"
+      python3 ../scripts/plot_results.py --artifacts-root ${BASE_RESULTS_DIR} --outdir ${BASE_RESULTS_DIR}/analysis_output --open-report || log "plot_results.py failed"
     else
       log "plot_results.py not found in expected paths; skipping auto-plot"
     fi
