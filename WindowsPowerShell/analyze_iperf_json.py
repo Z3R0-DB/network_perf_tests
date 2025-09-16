@@ -53,7 +53,7 @@ def extract_summary(j):
 
 def main():
     if len(sys.argv) < 2:
-        print("Usage: python analyze_iperf_json.py file1.json [file2.json ...]")
+        print("Usage: python3 analyze_iperf_json.py file1.json [file2.json ...]")
         sys.exit(1)
     rows = []
     for path in sys.argv[1:]:

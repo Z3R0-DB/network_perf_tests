@@ -1,0 +1,11 @@
+iperf3
+pingparsing
+requests
+argparse
+jsonschema
+pytest
+
+# analysis / plotting
+pandas
+matplotlib
+seaborn
