@@ -24,15 +24,18 @@ log() {
   fi
 }
 
-# Run iperf with retries. Args: output_file -- followed by iperf args (without -J)
+# Run iperf with retries using exponential backoff with jitter. Args: output_file -- followed by iperf args (without -J)
 run_iperf() {
   local outfile="$1"; shift
   local tmpfile="${outfile}.tmp"
-  local max_attempts=5
+  # more aggressive retry policy: up to 8 attempts, exponential backoff (1,2,4,8,...) seconds, capped
+  local max_attempts=8
+  local base_delay=1
+  local max_backoff=16
   local attempt=1
   while true; do
     log "Running iperf (attempt ${attempt}/${max_attempts}) -> ${outfile}"
-    # run iperf and capture JSON to a temp file
+    # run iperf and capture JSON to a temp file (capture stdout+stderr)
     "$IPERF" "$@" -J > "$tmpfile" 2>&1 || true
 
     # quick sanity: file should exist and not contain an "error" key
@@ -47,14 +50,27 @@ run_iperf() {
       log "iperf produced empty output (attempt ${attempt})"
     fi
 
-    # retry logic
+    # if we've exhausted attempts, save last output and return failure
     if [[ $attempt -ge $max_attempts ]]; then
       log "iperf failed after ${attempt} attempts; saving last output to ${outfile}"
       mv "$tmpfile" "$outfile" 2>/dev/null || true
       return 1
     fi
+
+    # compute exponential backoff with jitter (seconds, fractional allowed)
+    # backoff = base_delay * 2^(attempt-1), capped to max_backoff
+    local backoff=$(( base_delay * (1 << (attempt - 1)) ))
+    if [[ $backoff -gt $max_backoff ]]; then
+      backoff=$max_backoff
+    fi
+    # jitter in milliseconds [0..1000)
+    local jitter_ms=$(( RANDOM % 1000 ))
+    # compute sleep time as float: backoff + jitter_ms/1000
+    local sleep_time
+    sleep_time=$(awk -v b=$backoff -v j=$jitter_ms 'BEGIN{printf "%.3f", b + (j/1000)}')
+    log "Retrying iperf after ${sleep_time}s (backoff=${backoff}s jitter=${jitter_ms}ms)"
     attempt=$((attempt+1))
-    sleep 1
+    sleep "$sleep_time"
   done
 }
 

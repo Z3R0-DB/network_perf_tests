@@ -23,7 +23,15 @@ cd network_perf_tests
 Install the required dependencies using the following command:
 
 ```bash
-pip install -r requirements.txt
+pip3 install -r requirements.txt
+```
+
+It's recommended to use a virtual environment. For example:
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+python3 -m pip install -r requirements.txt
 ```
 
 ### Finding iperf
@@ -48,7 +56,7 @@ chmod +x scripts/wifi_run_macos.sh
 To automatically generate plots after the test completes, use the `--auto-plot` flag. This requires the Python analysis dependencies from `requirements.txt` (pandas, matplotlib, seaborn):
 
 ```bash
-pip install -r network_perf_tests/requirements.txt
+pip3 install -r network_perf_tests/requirements.txt
 ./scripts/wifi_run_macos.sh --server iperf.he.net --test-id macbook_wifi --run-name testA --duration 30 --udp-target-mbps 100 --verbose --auto-plot
 ```
 
