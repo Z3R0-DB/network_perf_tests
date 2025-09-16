@@ -146,10 +146,11 @@ def analyze_artifacts(root):
                     "timestamp": w.get("timestamp"),
                     "ssid": w.get("ssid"),
                     "bssid": w.get("bssid"),
-                    "rssi": w.get("rssi"),
-                    "noise": w.get("noise"),
-                    "snr": w.get("snr"),
-                    "signal_percent": w.get("signal_percent"),
+                    # RSSI/SNR temporarily disabled
+                    # "rssi": w.get("rssi"),
+                    # "noise": w.get("noise"),
+                    # "snr": w.get("snr"),
+                    # "signal_percent": w.get("signal_percent"),
                     "last_tx_rate_mbps": w.get("last_tx_rate_mbps"),
                     "channel": w.get("channel"),
                 })
@@ -205,7 +206,7 @@ def plot_summary(df, outdir):
     df['label'] = df.apply(lambda r: r.get('test_id') or os.path.basename(r['artifact_dir']), axis=1)
 
     # convert numeric columns
-    numeric_cols = ['rssi', 'noise', 'snr', 'signal_percent', 'last_tx_rate_mbps',
+    numeric_cols = ['last_tx_rate_mbps',
                         'tcp_dl_mbps', 'tcp_ul_mbps', 'udp_dl_mbps', 'udp_ul_mbps',
                         'tcp_dl_jitter_ms', 'tcp_ul_jitter_ms', 'udp_dl_jitter_ms', 'udp_ul_jitter_ms',
                         'tcp_dl_packet_loss_pct', 'tcp_ul_packet_loss_pct', 'udp_dl_packet_loss_pct', 'udp_ul_packet_loss_pct',
@@ -241,29 +242,29 @@ def plot_summary(df, outdir):
     except Exception:
         pass
 
-    # RSSI / Signal
-    if 'rssi' in df.columns or 'signal_percent' in df.columns:
-        plt.figure(figsize=(8, 5))
-        if 'rssi' in df.columns:
-            sns.barplot(data=df, x='label', y='rssi')
-            plt.ylabel('RSSI (dBm)')
-            plt.title('RSSI by test')
-        else:
-            sns.barplot(data=df, x='label', y='signal_percent')
-            plt.ylabel('Signal %')
-            plt.title('Signal % by test')
-        plt.xticks(rotation=45, ha='right')
-        plt.tight_layout()
-        rssi_png = os.path.join(outdir, 'rssi_comparison.png')
-        plt.savefig(rssi_png)
-        plt.close()
-        print(f"Wrote plot: {rssi_png}")
-        try:
-            with open(rssi_png, 'rb') as f:
-                b64 = base64.b64encode(f.read()).decode('ascii')
-                images.append(('RSSI / Signal', rssi_png, b64))
-        except Exception:
-            pass
+    # RSSI / Signal plotting disabled temporarily
+    # if 'rssi' in df.columns or 'signal_percent' in df.columns:
+    #     plt.figure(figsize=(8, 5))
+    #     if 'rssi' in df.columns:
+    #         sns.barplot(data=df, x='label', y='rssi')
+    #         plt.ylabel('RSSI (dBm)')
+    #         plt.title('RSSI by test')
+    #     else:
+    #         sns.barplot(data=df, x='label', y='signal_percent')
+    #         plt.ylabel('Signal %')
+    #         plt.title('Signal % by test')
+    #     plt.xticks(rotation=45, ha='right')
+    #     plt.tight_layout()
+    #     rssi_png = os.path.join(outdir, 'rssi_comparison.png')
+    #     plt.savefig(rssi_png)
+    #     plt.close()
+    #     print(f"Wrote plot: {rssi_png}")
+    #     try:
+    #         with open(rssi_png, 'rb') as f:
+    #             b64 = base64.b64encode(f.read()).decode('ascii')
+    #             images.append(('RSSI / Signal', rssi_png, b64))
+    #     except Exception:
+    #         pass
 
     # Latency comparison
     lat_cols = [c for c in ['ping_gw_mean_ms', 'ping_wan_mean_ms'] if c in df.columns]
@@ -350,7 +351,7 @@ def plot_summary(df, outdir):
         if 'test_id' in df.columns and df['test_id'].notna().any():
             baseline_idx = df.index[df['test_id'].notna()][0]
 
-        metrics_for_cards = ['tcp_dl_mbps', 'tcp_ul_mbps', 'udp_dl_mbps', 'udp_ul_mbps', 'rssi', 'snr', 'ping_wan_mean_ms']
+    metrics_for_cards = ['tcp_dl_mbps', 'tcp_ul_mbps', 'udp_dl_mbps', 'udp_ul_mbps', 'ping_wan_mean_ms']
 
         with open(html_path, 'w') as h:
             h.write(f'<!doctype html><html><head><meta charset="utf-8"><title>{title}</title>')
@@ -391,7 +392,7 @@ def plot_summary(df, outdir):
             # Comparison section: percent change vs baseline
             h.write('<h2>Comparison vs baseline</h2>')
             try:
-                comp_metrics = [c for c in ['tcp_dl_mbps', 'tcp_ul_mbps', 'udp_dl_mbps', 'udp_ul_mbps', 'rssi', 'snr', 'ping_wan_mean_ms'] if c in df.columns]
+                comp_metrics = [c for c in ['tcp_dl_mbps', 'tcp_ul_mbps', 'udp_dl_mbps', 'udp_ul_mbps', 'ping_wan_mean_ms'] if c in df.columns]
                 if comp_metrics and len(df) > 1:
                     base = df.loc[baseline_idx, comp_metrics].astype(float)
                     h.write('<table>')

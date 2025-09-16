@@ -123,8 +123,9 @@ if [[ -x "$AIRPORT" ]]; then
   log "Captured WLAN raw output to ${WLAN_RAW_FILE}"
 
   # Extract common keys (agrCtlRSSI or RSSI), agrCtlNoise, lastTxRate, channel, SSID, BSSID
-  RSSI=$(echo "$RAW" | awk -F": " '/agrCtlRSSI|RSSI:/ {print $2; exit}') || true
-  NOISE=$(echo "$RAW" | awk -F": " '/agrCtlNoise|Noise:/ {print $2; exit}') || true
+  # RSSI and SNR collection temporarily disabled per request.
+  # RSSI=$(echo "$RAW" | awk -F": " '/agrCtlRSSI|RSSI:/ {print $2; exit}') || true
+  # NOISE=$(echo "$RAW" | awk -F": " '/agrCtlNoise|Noise:/ {print $2; exit}') || true
   LASTTX=$(echo "$RAW" | awk -F": " '/lastTxRate/ {print $2; exit}') || true
   CHANNEL=$(echo "$RAW" | awk -F": " '/channel/ {print $2; exit}') || true
   SSID=$(echo "$RAW" | sed -n 's/^ *SSID: *//p' | head -n1 || true)
@@ -134,45 +135,43 @@ if [[ -x "$AIRPORT" ]]; then
   RSSI_VAL=""
   NOISE_VAL=""
   if [[ -n "$RSSI" ]]; then RSSI_VAL=$(echo "$RSSI" | tr -d '\r') || true; fi
-  if [[ -n "$NOISE" ]]; then NOISE_VAL=$(echo "$NOISE" | tr -d '\r') || true; fi
+  # if [[ -n "$NOISE" ]]; then NOISE_VAL=$(echo "$NOISE" | tr -d '\r') || true; fi
 
   # compute signal percent (rough heuristic) and SNR
   SIGNAL_PCT="null"
-  SNR="null"
-  if [[ -n "$RSSI_VAL" && -n "$NOISE_VAL" ]]; then
-    # ensure integers
-    RSSI_INT=$(echo "$RSSI_VAL" | awk '{print int($0)}')
-    NOISE_INT=$(echo "$NOISE_VAL" | awk '{print int($0)}')
-    if [[ $RSSI_INT -ge -50 ]]; then
-      SIGNAL_PCT=100
-    elif [[ $RSSI_INT -le -100 ]]; then
-      SIGNAL_PCT=0
-    else
-      SIGNAL_PCT=$((2*(RSSI_INT + 100)))
-    fi
-    SNR=$((RSSI_INT - NOISE_INT))
-  elif [[ -n "$RSSI_VAL" ]]; then
-    RSSI_INT=$(echo "$RSSI_VAL" | awk '{print int($0)}')
-    if [[ $RSSI_INT -ge -50 ]]; then
-      SIGNAL_PCT=100
-    elif [[ $RSSI_INT -le -100 ]]; then
-      SIGNAL_PCT=0
-    else
-      SIGNAL_PCT=$((2*(RSSI_INT + 100)))
-    fi
-  fi
-
-  # write JSON summary (minimal, human-readable)
-  cat > "$WLAN_SUMMARY_FILE" <<JSON
-{
+  # RSSI_VAL and SNR computations commented out temporarily.
+  # RSSI_VAL=""
+  # if [[ -n "$RSSI" ]]; then RSSI_VAL=$(echo "$RSSI" | tr -d '\r') || true; fi
+  # SNR="null"
+  # if [[ -n "$RSSI_VAL" && -n "$NOISE_VAL" ]]; then
+  #   RSSI_INT=$(echo "$RSSI_VAL" | awk '{print int($0)}')
+  #   NOISE_INT=$(echo "$NOISE_VAL" | awk '{print int($0)}')
+  #   if [[ $RSSI_INT -ge -50 ]]; then
+  #     SIGNAL_PCT=100
+  #   elif [[ $RSSI_INT -le -100 ]]; then
+  #     SIGNAL_PCT=0
+  #   else
+  #     SIGNAL_PCT=$((2*(RSSI_INT + 100)))
+  #   fi
+  #   SNR=$((RSSI_INT - NOISE_INT))
+  # elif [[ -n "$RSSI_VAL" ]]; then
+  #   RSSI_INT=$(echo "$RSSI_VAL" | awk '{print int($0)}')
+  #   if [[ $RSSI_INT -ge -50 ]]; then
+  #     SIGNAL_PCT=100
+  #   elif [[ $RSSI_INT -le -100 ]]; then
+  #     SIGNAL_PCT=0
+  #   else
+  #     SIGNAL_PCT=$((2*(RSSI_INT + 100)))
+  #   fi
+  # fi
   "timestamp": "${TS}",
   "test_id": "${TESTID}",
   "ssid": "${SSID}",
   "bssid": "${BSSID}",
-  "rssi": ${RSSI_VAL:-null},
-  "noise": ${NOISE_VAL:-null},
-  "snr": ${SNR},
-  "signal_percent": ${SIGNAL_PCT},
+  # "rssi": ${RSSI_VAL:-null},
+  # "noise": ${NOISE_VAL:-null},
+  # "snr": ${SNR},
+  # "signal_percent": ${SIGNAL_PCT},
   "last_tx_rate_mbps": "${LASTTX}",
   "channel": "${CHANNEL}"
 }
