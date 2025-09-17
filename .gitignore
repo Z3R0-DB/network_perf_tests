@@ -1,0 +1,31 @@
+# Ignore analysis outputs and test artifacts
+/results/analysis_output/
+/results/artifacts_*/
+
+# Ignore any raw artifacts directories
+/results/**/artifacts_*/
+
+# Virtual environment
+/.venv/
+
+# Python cache and metadata
+__pycache__/
+*.py[cod]
+*$py.class
+
+# macOS files
+.DS_Store
+
+# Logs
+*.log
+
+# Temporary files
+*.tmp
+*.swp
+
+# Editors
+.vscode/
+
+# Optional: ignore generated reports and exports at repo root
+/report.pdf
+/report.html
