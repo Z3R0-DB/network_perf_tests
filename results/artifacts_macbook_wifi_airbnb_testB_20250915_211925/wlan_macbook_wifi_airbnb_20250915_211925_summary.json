@@ -1,0 +1,12 @@
+{
+  "timestamp": "20250915_211925",
+  "test_id": "macbook_wifi_airbnb",
+  "ssid": "",
+  "bssid": "",
+  "rssi": null,
+  "noise": null,
+  "snr": null,
+  "signal_percent": null,
+  "last_tx_rate_mbps": "",
+  "channel": ""
+}

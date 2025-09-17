@@ -1,0 +1,12 @@
+{
+  "timestamp": "20250905_152028",
+  "test_id": "macbook_wifi_hot_ext",
+  "ssid": "",
+  "bssid": "",
+  "rssi": null,
+  "noise": null,
+  "snr": null,
+  "signal_percent": null,
+  "last_tx_rate_mbps": "",
+  "channel": ""
+}
