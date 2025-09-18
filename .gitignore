@@ -29,3 +29,15 @@ __pycache__/
 # Optional: ignore generated reports and exports at repo root
 /report.pdf
 /report.html
+
+# Ignore test results and generated analysis
+results/
+results/**
+analysis_output/
+network_perf_tests/analysis_output/
+
+# Python cache
+__pycache__/
+.pytest_cache/
+.venv/
+.env

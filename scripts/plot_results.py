@@ -12,8 +12,6 @@ import glob
 import json
 import os
 import webbrowser
-import subprocess
-import shutil
 from datetime import datetime
 from statistics import mean, stdev
 import re
@@ -309,62 +307,8 @@ def plot_summary(df, outdir):
     tr:hover td{background:#fff8}
     .summary-controls{display:flex;gap:8px;align-items:center;margin:8px 0}
     .btn{background:var(--accent);color:#fff;padding:8px 12px;border-radius:6px;border:none;cursor:pointer;font-size:13px}
-    .btn-small{background:var(--accent);color:#fff;padding:4px 8px;border-radius:4px;border:none;cursor:pointer;font-size:12px}
-    .btn-small:hover{background:#0056e0}
     .muted{color:var(--muted);font-size:13px}
-    
-    /* Summary + Detail table styles */
-    .summary-table-wrap{background:var(--card);border:1px solid var(--border);border-radius:8px;overflow:visible !important;max-height:none !important}
-    .summary-table{width:100%;border-collapse:collapse;margin:0}
-    .summary-table th{background:#f8f9fa;padding:12px;text-align:left;border-bottom:2px solid var(--border);font-weight:600}
-    .summary-table td{padding:10px 12px;border-bottom:1px solid #f1f1f1}
-    .summary-row:hover{background:#f8f9fa}
-    .detail-row{background:#fafbfc}
-    .detail-content{padding:16px}
-    .detail-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:16px}
-    .metric-group{background:#fff;border:1px solid #e1e5e9;border-radius:6px;padding:12px}
-    .metric-group h5{margin:0 0 8px 0;color:var(--accent);font-size:14px}
-    .metric-item{display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid #f1f1f1}
-    .metric-item:last-child{border-bottom:none}
-    .metric-label{font-weight:500;color:#666}
-    .metric-value{font-weight:600;color:#111}
     @media (max-width:900px){.plots{grid-template-columns:1fr}.card-row{grid-template-columns:repeat(auto-fill,minmax(160px,1fr))}.table-wrap{max-height:240px}}
-
-    /* Print-friendly rules: expand tables, repeat headers, avoid clipping */
-    @media print {
-        :root{--bg:#ffffff}
-        body{background:var(--bg);color:#000;font-size:11pt}
-        .container{max-width:100%;margin:0;padding:10mm}
-        .summary-controls, .btn {display:none !important}
-        /* allow tables to expand for print */
-        .table-wrap{max-height:none !important;overflow:visible !important;border:0 !important;padding:6px 0}
-        /* Keep headings with the following content */
-        h2, h3, h4 {page-break-after: avoid; page-break-inside: avoid}
-        .card, .table-wrap, .plots {page-break-inside: avoid; break-inside: avoid}
-        /* Use automatic table layout for readable column widths */
-        table{page-break-inside:auto;table-layout:auto;width:100%;border-collapse:collapse}
-        thead{display:table-header-group}
-        tfoot{display:table-footer-group}
-        tr{page-break-inside:avoid;page-break-after:auto}
-        th, td{padding:8px 10px;text-align:left;vertical-align:top;word-break:break-word}
-        thead th{background:#fff;position:static}
-        /* Print rules for summary + detail tables */
-        .summary-controls, .btn, .btn-small {display:none !important}
-        .summary-table-wrap{max-height:none !important;overflow:visible !important;border:0 !important}
-        .detail-row{display:table-row !important}
-        .detail-content{padding:8px 0}
-        .detail-grid{display:block}
-        .metric-group{margin-bottom:8px;padding:6px;border:1px solid #ccc}
-        .metric-group h5{font-size:10pt;margin:0 0 4px 0}
-        .metric-item{display:block;padding:2px 0}
-        .metric-label{font-weight:bold}
-        tbody td{white-space:normal;overflow:visible;text-overflow:clip;max-width:none;padding:8px;font-size:10.5pt}
-        .plots{display:block}
-        .plotimg{max-width:100%;height:auto;page-break-inside:avoid}
-        .card{box-shadow:none;border:none;border-radius:0;padding:6px}
-        footer{color:#666}
-        @page{size: A4; margin:12mm}
-    }
     '''
 
     # choose baseline
@@ -383,87 +327,18 @@ def plot_summary(df, outdir):
             h.write(f'<header class="site-header"><div class="inner"><div><h1>{title}</h1><div class="meta">Generated: {now}</div></div>')
             h.write('<div><button onclick="window.print()">Print</button></div></div></header>')
 
-            # Summary + Detail table pattern (moved to top)
-            h.write('<h2>Test Results Summary</h2>')
-            h.write('<div class="summary-controls"><input id="search" placeholder="Filter by test name or value..." oninput="filterTable()" style="flex:1;padding:8px;border:1px solid #ddd;border-radius:6px">')
-            h.write('</div>')
-
-            # Create summary table with key metrics only
-            summary_cols = ['test_id', 'tcp_dl_mbps', 'tcp_ul_mbps', 'ping_wan_mean_ms', 'timestamp']
-            available_summary_cols = [col for col in summary_cols if col in df.columns]
-            
-            h.write('<div class="table-wrap summary-table-wrap">')
-            h.write('<table class="summary-table" id="summary-table">')
-            h.write('<thead><tr>')
-            
-            # Header row
-            col_headers = {
-                'test_id': 'Test ID',
-                'tcp_dl_mbps': 'Download (Mbps)',
-                'tcp_ul_mbps': 'Upload (Mbps)', 
-                'ping_wan_mean_ms': 'Latency (ms)',
-                'timestamp': 'Timestamp'
-            }
-            
-            for col in available_summary_cols:
-                h.write(f'<th>{col_headers.get(col, col)}</th>')
-            h.write('<th>Actions</th>')
-            h.write('</tr></thead>')
-            h.write('<tbody>')
-            
-            # Data rows
-            for idx, (_, row) in enumerate(df.iterrows()):
-                test_label = row.get('test_id') or os.path.basename(row['artifact_dir'])
-                h.write(f'<tr class="summary-row" data-row="{idx}">')
-                
-                for col in available_summary_cols:
-                    val = row.get(col)
-                    if col == 'timestamp' and val:
-                        # Format timestamp nicely
-                        display = str(val)[:16] if len(str(val)) > 16 else str(val)
-                    elif isinstance(val, float) and not pd.isna(val):
-                        display = f'{val:.2f}'
-                    elif val is None or (isinstance(val, float) and pd.isna(val)):
-                        display = '—'
-                    else:
-                        display = str(val)
-                    h.write(f'<td>{display}</td>')
-                
-                h.write(f'<td><button class="btn-small" onclick="toggleDetails({idx})">View Details</button></td>')
-                h.write('</tr>')
-                
-                # Hidden detail row
-                h.write(f'<tr class="detail-row" id="detail-{idx}" style="display:none">')
-                h.write(f'<td colspan="{len(available_summary_cols) + 1}">')
-                h.write('<div class="detail-content">')
-                h.write(f'<h4>Detailed Results: {test_label}</h4>')
-                h.write('<div class="detail-grid">')
-                
-                # Group metrics logically
-                metric_groups = {
-                    'Connection Info': ['ssid', 'bssid', 'channel', 'last_tx_rate_mbps'],
-                    'TCP Performance': ['tcp_dl_mbps', 'tcp_ul_mbps', 'tcp_dl_jitter_ms', 'tcp_ul_jitter_ms', 'tcp_dl_packet_loss_pct', 'tcp_ul_packet_loss_pct'],
-                    'UDP Performance': ['udp_dl_mbps', 'udp_ul_mbps', 'udp_dl_jitter_ms', 'udp_ul_jitter_ms', 'udp_dl_packet_loss_pct', 'udp_ul_packet_loss_pct'],
-                    'Ping Results': ['ping_gw_mean_ms', 'ping_gw_std_ms', 'ping_wan_mean_ms', 'ping_wan_std_ms']
-                }
-                
-                for group_name, metrics in metric_groups.items():
-                    available_metrics = [m for m in metrics if m in df.columns and not pd.isna(row.get(m)) and row.get(m) is not None]
-                    if available_metrics:
-                        h.write(f'<div class="metric-group"><h5>{group_name}</h5>')
-                        for metric in available_metrics:
-                            val = row.get(metric)
-                            if isinstance(val, float):
-                                display_val = f'{val:.2f}'
-                            else:
-                                display_val = str(val)
-                            h.write(f'<div class="metric-item"><span class="metric-label">{metric}:</span> <span class="metric-value">{display_val}</span></div>')
-                        h.write('</div>')
-                
-                h.write('</div></div></td></tr>')
-            
-            h.write('</tbody></table>')
-            h.write('</div>')
+            # cards
+            h.write('<section class="card-row">')
+            for _, r in df.iterrows():
+                label = r.get('test_id') or os.path.basename(r['artifact_dir'])
+                h.write('<div class="card">')
+                h.write(f'<h4>{label}</h4>')
+                for m in metrics_for_cards:
+                    val = r.get(m)
+                    display = '' if val is None or (isinstance(val, float) and pd.isna(val)) else (f'{val:.2f}' if isinstance(val, float) else str(val))
+                    h.write(f'<div><strong>{display}</strong> <small style="color:#666">{m}</small></div>')
+                h.write('</div>')
+            h.write('</section>')
 
             # plots
             h.write('<section class="plots">')
@@ -473,6 +348,23 @@ def plot_summary(df, outdir):
                 h.write(f'<img class="plotimg" src="data:image/png;base64,{b64}" alt="{title_img}"/>')
                 h.write('</div>')
             h.write('</section>')
+
+            # table (compact and scrollable, with toggle for full table)
+            h.write('<h2>Summary table</h2>')
+            h.write('<div class="summary-controls"><input id="search" placeholder="Filter by label or value..." oninput="filterTable()" style="flex:1;padding:8px;border:1px solid #ddd;border-radius:6px">')
+            h.write('<button class="btn" onclick="toggleFull()">Toggle full table</button>')
+            h.write('</div>')
+
+            # compact scrolling table
+            compact_html = df.to_html(index=False, na_rep='', classes='summary-table compact', table_id='compact-table')
+            # full table (hidden by default)
+            full_html = df.to_html(index=False, na_rep='', classes='summary-table full', table_id='full-table')
+            h.write('<div class="table-wrap" id="compact-wrap">')
+            h.write(compact_html)
+            h.write('</div>')
+            h.write('<div style="display:none;" id="full-wrap">')
+            h.write(full_html)
+            h.write('</div>')
             # comparison (compact, scrollable table like the summary)
             h.write('<h2>Comparison vs baseline</h2>')
             comp_metrics = [c for c in metrics_for_cards if c in df.columns]
@@ -509,67 +401,25 @@ def plot_summary(df, outdir):
 
             h.write('<footer style="color:#666;margin-top:20px">Generated by plot_results.py</footer>')
 
-            # JS: filter and toggle functionality for summary + detail tables
+            # JS: filter, toggle and responsive behaviors
             h.write('''
 <script>
 function filterTable(){
     const q = document.getElementById('search').value.toLowerCase();
-    const summaryRows = document.querySelectorAll('.summary-row');
-    summaryRows.forEach(row => {
-        const text = row.innerText.toLowerCase();
-        const shouldShow = text.includes(q);
-        row.style.display = shouldShow ? '' : 'none';
-        // Also hide corresponding detail row if summary is hidden
-        const rowIndex = row.getAttribute('data-row');
-        const detailRow = document.getElementById(`detail-${rowIndex}`);
-        if (detailRow && !shouldShow) {
-            detailRow.style.display = 'none';
-        }
+    const compactRows = document.querySelectorAll('#compact-wrap .summary-table tbody tr');
+    const fullRows = document.querySelectorAll('#full-wrap .summary-table tbody tr');
+    [compactRows, fullRows].forEach(nodeList => {
+        nodeList.forEach(r => { r.style.display = r.innerText.toLowerCase().includes(q) ? '' : 'none'; });
     });
 }
-
-function toggleDetails(rowIndex){
-    const detailRow = document.getElementById(`detail-${rowIndex}`);
-    const btn = event.target;
-    // find the nearest scrolling wrapper (table-wrap)
-    let wrapper = detailRow.closest('.table-wrap');
-    if (!wrapper) {
-        wrapper = document.querySelector('.summary-table-wrap') || document.querySelector('.table-wrap');
-    }
-    if (detailRow.style.display === 'none' || !detailRow.style.display) {
-        // preserve previous wrapper styles so we can restore them
-        if (wrapper) {
-            wrapper.dataset._prevOverflow = wrapper.style.overflow || '';
-            wrapper.dataset._prevMaxHeight = wrapper.style.maxHeight || '';
-            // expand wrapper to show full details
-            wrapper.style.overflow = 'visible';
-            wrapper.style.maxHeight = 'none';
-        }
-        detailRow.style.display = 'table-row';
-        btn.textContent = 'Hide Details';
-        // ensure the detail row is visible in the viewport
-        setTimeout(() => {
-            // scroll wrapper into view first if it's clipped
-            if (wrapper) wrapper.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-            detailRow.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        }, 120);
-    } else {
-        detailRow.style.display = 'none';
-        btn.textContent = 'View Details';
-        // restore wrapper styles
-        if (wrapper && (wrapper.dataset._prevOverflow !== undefined || wrapper.dataset._prevMaxHeight !== undefined)) {
-            wrapper.style.overflow = wrapper.dataset._prevOverflow || '';
-            wrapper.style.maxHeight = wrapper.dataset._prevMaxHeight || '';
-            delete wrapper.dataset._prevOverflow;
-            delete wrapper.dataset._prevMaxHeight;
-        }
-    }
+function toggleFull(){
+    const f = document.getElementById('full-wrap');
+    f.style.display = (f.style.display === 'none') ? 'block' : 'none';
 }
-
-// Improve table column sizing and add tooltips
+// Improve table column sizing: collapse very long labels
 document.addEventListener('DOMContentLoaded', ()=>{
-    document.querySelectorAll('.metric-value').forEach(cell=>{
-        if(cell.innerText.length > 20) cell.title = cell.innerText;
+    document.querySelectorAll('.summary-table tbody td').forEach(td=>{
+        if(td.innerText.length>40) td.title = td.innerText;
     });
 });
 </script>
@@ -582,70 +432,11 @@ document.addEventListener('DOMContentLoaded', ()=>{
     return html_path, images
 
 
-def print_to_pdf(html_path: str, pdf_path: str) -> bool:
-    """Try to produce a PDF from the generated HTML using several strategies.
-
-    Order:
-    1. Headless Chrome/Chromium --print-to-pdf
-    2. wkhtmltopdf
-    3. weasyprint (Python library)
-
-    Returns True on success, False otherwise.
-    """
-    html_abspath = os.path.abspath(html_path)
-    pdf_abspath = os.path.abspath(pdf_path)
-
-    # Try common Chrome/Chromium locations
-    chrome_candidates = [
-        shutil.which('google-chrome'),
-        shutil.which('chrome'),
-        shutil.which('chromium'),
-        shutil.which('chromium-browser'),
-        '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
-        '/Applications/Chromium.app/Contents/MacOS/Chromium',
-    ]
-    for cmd in chrome_candidates:
-        if not cmd:
-            continue
-        if not os.path.exists(cmd):
-            # shutil.which may return None or an invalid path; skip if not present
-            continue
-        try:
-            subprocess.run([cmd, '--headless', '--disable-gpu', f'--print-to-pdf={pdf_abspath}', f'file://{html_abspath}'], check=True)
-            print(f'Wrote PDF: {pdf_abspath} (via {cmd})')
-            return True
-        except Exception as e:
-            print(f'Chrome/Chromium PDF generation failed with {cmd}:', e)
-
-    # Try wkhtmltopdf
-    wk = shutil.which('wkhtmltopdf')
-    if wk:
-        try:
-            subprocess.run([wk, f'file://{html_abspath}', pdf_abspath], check=True)
-            print(f'Wrote PDF: {pdf_abspath} (via wkhtmltopdf)')
-            return True
-        except Exception as e:
-            print('wkhtmltopdf failed:', e)
-
-    # Try WeasyPrint (Python)
-    try:
-        from weasyprint import HTML
-        HTML(filename=html_abspath).write_pdf(pdf_abspath)
-        print(f'Wrote PDF: {pdf_abspath} (via weasyprint)')
-        return True
-    except Exception as e:
-        print('WeasyPrint not available or failed:', e)
-
-    print('No available method to generate a PDF automatically. Install Google Chrome/Chromium, wkhtmltopdf, or weasyprint (pip).')
-    return False
-
-
 def main():
     p = argparse.ArgumentParser()
     p.add_argument('--artifacts-root', default='.', help='Root folder to search for artifacts_* dirs')
     p.add_argument('--outdir', default='analysis_output', help='Where to write CSV and plots')
     p.add_argument('--open-report', action='store_true', help='Open the generated HTML report in the default browser')
-    p.add_argument('--pdf', nargs='?', const='report.pdf', help='Also generate a PDF next to the HTML report (optional path)')
     args = p.parse_args()
 
     df = analyze_artifacts(args.artifacts_root)
@@ -659,14 +450,6 @@ def main():
             print('Opened report in default browser')
         except Exception as e:
             print('Failed to open report:', e)
-    if args.pdf and html_path:
-        pdf_path = args.pdf if args.pdf != 'report.pdf' else os.path.join(args.outdir, 'report.pdf')
-        try:
-            ok = print_to_pdf(html_path, pdf_path)
-            if not ok:
-                print('PDF generation failed')
-        except Exception as e:
-            print('PDF generation error:', e)
 
 
 if __name__ == '__main__':

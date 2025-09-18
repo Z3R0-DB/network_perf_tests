@@ -1,0 +1,15 @@
+[tool.poetry]
+name = "network_perf_tests"
+version = "0.1.0"
+description = "A project for testing wireless network performance including bandwidth, latency, and jitter."
+authors = ["Your Name <youremail@example.com>"]
+license = "MIT"
+
+[tool.poetry.dependencies]
+python3 = "^3.8"
+iperf3 = "*"
+ping = "*"
+
+[build-system]
+requires = ["poetry-core>=1.0.0"]
+build-backend = "poetry.core.masonry.api"
