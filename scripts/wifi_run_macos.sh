@@ -5,8 +5,12 @@ usage() {
   cat <<EOF
 Usage: $0 --server SERVER --test-id ID [--duration N] [--udp-target-mbps M]
 Defaults: duration=30, udp-target-mbps=100
+Options:
+  --loop-minutes N       Run tests continuously for N minutes
+  --loop-interval N      Wait N seconds between test iterations (default: 60)
 Example:
   $0 --server iperf.he.net --test-id macbook_wifi --duration 10 --udp-target-mbps 50
+  $0 --server iperf.he.net --test-id macbook_wifi --loop-minutes 120 --loop-interval 30 --verbose --auto-plot
 EOF
   exit 1
 }
@@ -17,6 +21,8 @@ UDP_M=100
 RUN_NAME=""
 VERBOSE=0
 AUTO_PLOT=0
+LOOP_MINUTES=0
+LOOP_INTERVAL=60
 
 log() {
   if [[ $VERBOSE -eq 1 ]]; then
@@ -81,9 +87,11 @@ while [[ $# -gt 0 ]]; do
     --test-id) TESTID="$2"; shift 2;;
     --duration) DURATION="$2"; shift 2;;
     --udp-target-mbps) UDP_M="$2"; shift 2;;
-  --run-name) RUN_NAME="$2"; shift 2;;
-  --verbose) VERBOSE=1; shift 1;;
-  --auto-plot) AUTO_PLOT=1; shift 1;;
+    --run-name) RUN_NAME="$2"; shift 2;;
+    --verbose) VERBOSE=1; shift 1;;
+    --auto-plot) AUTO_PLOT=1; shift 1;;
+    --loop-minutes) LOOP_MINUTES="$2"; shift 2;;
+    --loop-interval) LOOP_INTERVAL="$2"; shift 2;;
     -h|--help) usage;;
     *) echo "Unknown arg: $1"; usage;;
   esac
@@ -100,93 +108,142 @@ if [[ -z "$IPERF" ]]; then
   exit 2
 fi
 
-TS=$(date +%Y%m%d_%H%M%S)
-BASE_RESULTS_DIR="results"
-mkdir -p "$BASE_RESULTS_DIR"
-if [[ -n "$RUN_NAME" ]]; then
-  OUTDIR="${BASE_RESULTS_DIR}/artifacts_${TESTID}_${RUN_NAME}_${TS}"
+# Set up loop variables
+if [[ $LOOP_MINUTES -gt 0 ]]; then
+  END_TIME=$(date -u -v+"${LOOP_MINUTES}M" +%s)
+  ITERATION=1
+  log "Loop mode enabled: running tests for ${LOOP_MINUTES} minutes with ${LOOP_INTERVAL}s intervals"
 else
-  OUTDIR="${BASE_RESULTS_DIR}/artifacts_${TESTID}_${TS}"
+  END_TIME=0
+  ITERATION=0
 fi
-mkdir -p "$OUTDIR"
 
-log "Starting test run. server=${SERVER}, test_id=${TESTID}, run_name=${RUN_NAME}, duration=${DURATION}, udp_target_mbps=${UDP_M}"
+# Main test execution function
+run_single_test() {
+  local iteration=$1
+  
+  TS=$(date +%Y%m%d_%H%M%S)
+  BASE_RESULTS_DIR="results"
+  mkdir -p "$BASE_RESULTS_DIR"
+  
+  # Auto-generate run name if in loop mode and no custom run name provided
+  if [[ $LOOP_MINUTES -gt 0 ]] && [[ -z "$RUN_NAME" ]]; then
+    EFFECTIVE_RUN_NAME="test${iteration}"
+  elif [[ -n "$RUN_NAME" ]]; then
+    if [[ $LOOP_MINUTES -gt 0 ]]; then
+      EFFECTIVE_RUN_NAME="${RUN_NAME}${iteration}"
+    else
+      EFFECTIVE_RUN_NAME="$RUN_NAME"
+    fi
+  else
+    EFFECTIVE_RUN_NAME=""
+  fi
+  
+  if [[ -n "$EFFECTIVE_RUN_NAME" ]]; then
+    OUTDIR="${BASE_RESULTS_DIR}/artifacts_${TESTID}_${EFFECTIVE_RUN_NAME}_${TS}"
+  else
+    OUTDIR="${BASE_RESULTS_DIR}/artifacts_${TESTID}_${TS}"
+  fi
+  mkdir -p "$OUTDIR"
 
-# capture wifi state (macOS) and parse key metrics
-AIRPORT="/System/Library/PrivateFrameworks/Apple80211.framework/Versions/Current/Resources/airport"
+  log "Starting test run #${iteration}. server=${SERVER}, test_id=${TESTID}, run_name=${EFFECTIVE_RUN_NAME}, duration=${DURATION}, udp_target_mbps=${UDP_M}"
+
+# capture network interface state (macOS) - works for both WiFi and Ethernet
 WLAN_RAW_FILE="${OUTDIR}/wlan_${TESTID}_${TS}.txt"
 WLAN_SUMMARY_FILE="${OUTDIR}/wlan_${TESTID}_${TS}_summary.json"
 
-if [[ -x "$AIRPORT" ]]; then
-  RAW=$($AIRPORT -I 2>/dev/null || true)
+# Detect the active network interface
+ACTIVE_IF=$(route -n get default 2>/dev/null | awk '/interface:/ {print $2}') || true
+INTERFACE_NAME=""
+INTERFACE_TYPE=""
+
+if [[ -z "$ACTIVE_IF" ]]; then
+  log "Warning: No active network interface detected (no default route). Connectivity issues may occur."
+fi
+
+if [[ -n "$ACTIVE_IF" ]]; then
+  # Get friendly name and type from networksetup
+  INTERFACE_INFO=$(networksetup -listallhardwareports 2>/dev/null | grep -B 1 "Device: ${ACTIVE_IF}" | head -1) || true
+  INTERFACE_NAME=$(echo "$INTERFACE_INFO" | sed 's/Hardware Port: //' || true)
+  
+  # Determine interface type
+  if [[ "$INTERFACE_NAME" =~ "Wi-Fi" ]]; then
+    INTERFACE_TYPE="wifi"
+  elif [[ "$INTERFACE_NAME" =~ "Ethernet" ]] || [[ "$INTERFACE_NAME" =~ "USB" ]] || [[ "$INTERFACE_NAME" =~ "Thunderbolt" ]]; then
+    INTERFACE_TYPE="ethernet"
+  else
+    INTERFACE_TYPE="other"
+  fi
+fi
+
+# Try wdutil for WiFi info, otherwise collect basic interface info
+if [[ "$INTERFACE_TYPE" == "wifi" ]] && command -v wdutil >/dev/null 2>&1; then
+  RAW=$(sudo -n wdutil info 2>/dev/null || wdutil info 2>/dev/null || true)
   echo "$RAW" > "$WLAN_RAW_FILE"
-  log "Captured WLAN raw output to ${WLAN_RAW_FILE}"
+  log "Captured WiFi output to ${WLAN_RAW_FILE} (using wdutil)"
 
-  # Extract common keys (agrCtlRSSI or RSSI), agrCtlNoise, lastTxRate, channel, SSID, BSSID
-  # RSSI and SNR collection temporarily disabled per request.
-  # RSSI=$(echo "$RAW" | awk -F": " '/agrCtlRSSI|RSSI:/ {print $2; exit}') || true
-  # NOISE=$(echo "$RAW" | awk -F": " '/agrCtlNoise|Noise:/ {print $2; exit}') || true
-  LASTTX=$(echo "$RAW" | awk -F": " '/lastTxRate/ {print $2; exit}') || true
-  CHANNEL=$(echo "$RAW" | awk -F": " '/channel/ {print $2; exit}') || true
-  SSID=$(echo "$RAW" | sed -n 's/^ *SSID: *//p' | head -n1 || true)
-  BSSID=$(echo "$RAW" | awk -F": " '/BSSID/ {print $2; exit}') || true
+  # Extract WiFi-specific info from wdutil output
+  SSID=$(echo "$RAW" | awk '/^[[:space:]]*SSID[[:space:]]*:/ {gsub(/^[[:space:]]*SSID[[:space:]]*:[[:space:]]*/, ""); print; exit}') || true
+  BSSID=$(echo "$RAW" | awk '/^[[:space:]]*BSSID[[:space:]]*:/ {gsub(/^[[:space:]]*BSSID[[:space:]]*:[[:space:]]*/, ""); print; exit}') || true
+  LASTTX=$(echo "$RAW" | awk '/^[[:space:]]*Tx Rate[[:space:]]*:/ {print $4; exit}') || true
+  CHANNEL=$(echo "$RAW" | awk '/^[[:space:]]*Channel[[:space:]]*:/ {gsub(/^[[:space:]]*Channel[[:space:]]*:[[:space:]]*/, ""); print; exit}') || true
 
-  # normalize numeric values
-  RSSI_VAL=""
-  NOISE_VAL=""
-  if [[ -n "$RSSI" ]]; then RSSI_VAL=$(echo "$RSSI" | tr -d '\r') || true; fi
-  # if [[ -n "$NOISE" ]]; then NOISE_VAL=$(echo "$NOISE" | tr -d '\r') || true; fi
-
-  # compute signal percent (rough heuristic) and SNR
-  SIGNAL_PCT="null"
-  # RSSI_VAL and SNR computations commented out temporarily.
-  # RSSI_VAL=""
-  # if [[ -n "$RSSI" ]]; then RSSI_VAL=$(echo "$RSSI" | tr -d '\r') || true; fi
-  # SNR="null"
-  # if [[ -n "$RSSI_VAL" && -n "$NOISE_VAL" ]]; then
-  #   RSSI_INT=$(echo "$RSSI_VAL" | awk '{print int($0)}')
-  #   NOISE_INT=$(echo "$NOISE_VAL" | awk '{print int($0)}')
-  #   if [[ $RSSI_INT -ge -50 ]]; then
-  #     SIGNAL_PCT=100
-  #   elif [[ $RSSI_INT -le -100 ]]; then
-  #     SIGNAL_PCT=0
-  #   else
-  #     SIGNAL_PCT=$((2*(RSSI_INT + 100)))
-  #   fi
-  #   SNR=$((RSSI_INT - NOISE_INT))
-  # elif [[ -n "$RSSI_VAL" ]]; then
-  #   RSSI_INT=$(echo "$RSSI_VAL" | awk '{print int($0)}')
-  #   if [[ $RSSI_INT -ge -50 ]]; then
-  #     SIGNAL_PCT=100
-  #   elif [[ $RSSI_INT -le -100 ]]; then
-  #     SIGNAL_PCT=0
-  #   else
-  #     SIGNAL_PCT=$((2*(RSSI_INT + 100)))
-  #   fi
-  # fi
+  cat > "$WLAN_SUMMARY_FILE" <<JSON
+{
   "timestamp": "${TS}",
   "test_id": "${TESTID}",
+  "interface_name": "${INTERFACE_NAME}",
+  "interface_type": "${INTERFACE_TYPE}",
+  "interface_device": "${ACTIVE_IF}",
   "ssid": "${SSID}",
   "bssid": "${BSSID}",
-  # "rssi": ${RSSI_VAL:-null},
-  # "noise": ${NOISE_VAL:-null},
-  # "snr": ${SNR},
-  # "signal_percent": ${SIGNAL_PCT},
   "last_tx_rate_mbps": "${LASTTX}",
   "channel": "${CHANNEL}"
 }
 JSON
-  log "WLAN summary written to ${WLAN_SUMMARY_FILE}"
+  log "Network interface summary written to ${WLAN_SUMMARY_FILE}"
 else
-  echo "airport utility not found. Falling back to networksetup/ifconfig output."
+  # For Ethernet or when wdutil unavailable, collect basic interface info
   networksetup -listallhardwareports > "$WLAN_RAW_FILE" 2>/dev/null || true
-  ifconfig > "${OUTDIR}/ifconfig_${TESTID}_${TS}.txt" 2>/dev/null || true
+  ifconfig "$ACTIVE_IF" >> "$WLAN_RAW_FILE" 2>/dev/null || true
+  
+  # Get MAC address and link speed if available
+  MAC_ADDR=$(ifconfig "$ACTIVE_IF" 2>/dev/null | awk '/ether/ {print $2}') || true
+  LINK_SPEED=$(networksetup -getMedia "$INTERFACE_NAME" 2>/dev/null | grep "Active:" | awk '{print $2}') || true
+  
+  cat > "$WLAN_SUMMARY_FILE" <<JSON
+{
+  "timestamp": "${TS}",
+  "test_id": "${TESTID}",
+  "interface_name": "${INTERFACE_NAME}",
+  "interface_type": "${INTERFACE_TYPE}",
+  "interface_device": "${ACTIVE_IF}",
+  "mac_address": "${MAC_ADDR}",
+  "link_speed": "${LINK_SPEED}",
+  "ssid": "",
+  "bssid": "",
+  "last_tx_rate_mbps": "",
+  "channel": ""
+}
+JSON
+  log "Network interface summary written to ${WLAN_SUMMARY_FILE}"
 fi
 
 # compute ping count ≈5Hz
 PING_COUNT=$((DURATION * 5))
 
 log "Running tests against server ${SERVER} for ${DURATION}s, UDP=${UDP_M} Mbps"
+
+# --- Traceroutes (run before bandwidth tests) ---
+log "Running traceroute to server ${SERVER}"
+# Note: macOS does not include the 'timeout' command by default, so we use Perl's alarm for a timeout.
+log "Running traceroute to WAN target 8.8.8.8"
+perl -e 'alarm shift; exec @ARGV' 60 traceroute -m 20 -q 2 -w 2 8.8.8.8 > "${OUTDIR}/traceroute_${TESTID}_${TS}_wan.txt" 2>&1 || true
+log "Traceroute to WAN finished: ${OUTDIR}/traceroute_${TESTID}_${TS}_wan.txt"
+
+log "Running traceroute to WAN target 8.8.8.8"
+perl -e 'alarm shift; exec @ARGV' 60 traceroute -m 20 -q 2 -w 2 8.8.8.8 > "${OUTDIR}/traceroute_${TESTID}_${TS}_wan.txt" 2>&1 || true
+log "Traceroute to WAN finished: ${OUTDIR}/traceroute_${TESTID}_${TS}_wan.txt"
 
 echo "Starting iperf tests..."
 
@@ -248,4 +305,38 @@ if [[ $AUTO_PLOT -eq 1 ]]; then
   else
     log "python3 not found in PATH; cannot run auto-plot"
   fi
+fi
+}
+
+# Execute tests - either single run or loop mode
+if [[ $LOOP_MINUTES -gt 0 ]]; then
+  while true; do
+    CURRENT_TIME=$(date -u +%s)
+    if [[ $CURRENT_TIME -ge $END_TIME ]]; then
+      log "Loop duration reached. Exiting after ${ITERATION} iterations."
+      break
+    fi
+    REMAINING_MINUTES=$(( (END_TIME - CURRENT_TIME) / 60 ))
+    log "=== Iteration ${ITERATION} (${REMAINING_MINUTES}min remaining) ==="
+    
+    run_single_test $ITERATION
+    run_single_test $ITERATION
+    
+    ITERATION=$((ITERATION + 1))
+    
+    # Check if we have time for another iteration
+    CURRENT_TIME=$(date -u +%s)
+    if [[ $CURRENT_TIME -ge $END_TIME ]]; then
+      log "Loop duration reached. Exiting after test completion."
+      break
+    fi
+    
+    log "Waiting ${LOOP_INTERVAL} seconds before next iteration..."
+    sleep $LOOP_INTERVAL
+  done
+  
+  log "Completed ${ITERATION} test iterations over ${LOOP_MINUTES} minutes"
+else
+  # Single test run
+  run_single_test 1
 fi

@@ -127,6 +127,11 @@ def analyze_artifacts(root):
                 row.update({
                     "test_id": w.get("test_id"),
                     "timestamp": w.get("timestamp"),
+                    "interface_name": w.get("interface_name"),
+                    "interface_type": w.get("interface_type"),
+                    "interface_device": w.get("interface_device"),
+                    "mac_address": w.get("mac_address"),
+                    "link_speed": w.get("link_speed"),
                     "ssid": w.get("ssid"),
                     "bssid": w.get("bssid"),
                     "last_tx_rate_mbps": w.get("last_tx_rate_mbps"),
@@ -142,14 +147,12 @@ def analyze_artifacts(root):
             v = parse_iperf_json(iperf_tcp_dl[0])
             if v:
                 row["tcp_dl_mbps"] = v.get("mbps")
-                row["tcp_dl_jitter_ms"] = v.get("jitter_ms")
-                row["tcp_dl_packet_loss_pct"] = v.get("packet_loss_pct")
+                # TCP doesn't provide jitter/loss metrics - only bandwidth. TCP uses reliable delivery with retransmissions, so packet loss is handled transparently.
         if iperf_tcp_ul:
             v = parse_iperf_json(iperf_tcp_ul[0])
             if v:
                 row["tcp_ul_mbps"] = v.get("mbps")
-                row["tcp_ul_jitter_ms"] = v.get("jitter_ms")
-                row["tcp_ul_packet_loss_pct"] = v.get("packet_loss_pct")
+                # TCP doesn't provide jitter/loss metrics - only bandwidth
         if iperf_udp_dl:
             v = parse_iperf_json(iperf_udp_dl[0])
             if v:
@@ -188,8 +191,8 @@ def plot_summary(df, outdir):
     numeric_cols = [
         'last_tx_rate_mbps',
         'tcp_dl_mbps', 'tcp_ul_mbps', 'udp_dl_mbps', 'udp_ul_mbps',
-        'tcp_dl_jitter_ms', 'tcp_ul_jitter_ms', 'udp_dl_jitter_ms', 'udp_ul_jitter_ms',
-        'tcp_dl_packet_loss_pct', 'tcp_ul_packet_loss_pct', 'udp_dl_packet_loss_pct', 'udp_ul_packet_loss_pct',
+        'udp_dl_jitter_ms', 'udp_ul_jitter_ms',
+        'udp_dl_packet_loss_pct', 'udp_ul_packet_loss_pct',
         'ping_gw_mean_ms', 'ping_wan_mean_ms'
     ]
     for c in numeric_cols:
@@ -244,12 +247,13 @@ def plot_summary(df, outdir):
             pass
 
     # Jitter comparison
-    jitter_cols = [c for c in ['tcp_dl_jitter_ms', 'tcp_ul_jitter_ms', 'udp_dl_jitter_ms', 'udp_ul_jitter_ms'] if c in df.columns]
+    # Jitter comparison (UDP only - TCP doesn't provide jitter)
+    jitter_cols = [c for c in ['udp_dl_jitter_ms', 'udp_ul_jitter_ms'] if c in df.columns]
     if jitter_cols:
         jit_df = df[['label'] + jitter_cols].melt(id_vars='label', var_name='metric', value_name='ms')
         plt.figure(figsize=(10, 6))
         sns.barplot(data=jit_df, x='label', y='ms', hue='metric')
-        plt.title('Jitter comparison (ms)')
+        plt.title('Jitter comparison (ms) - UDP only')
         plt.xticks(rotation=45, ha='right')
         plt.tight_layout()
         jit_png = os.path.join(outdir, 'jitter_comparison.png')
@@ -259,17 +263,17 @@ def plot_summary(df, outdir):
         try:
             with open(jit_png, 'rb') as f:
                 b64 = base64.b64encode(f.read()).decode('ascii')
-                images.append(('Jitter comparison (ms)', jit_png, b64))
+                images.append(('Jitter comparison (ms) - UDP only', jit_png, b64))
         except Exception:
             pass
 
-    # Packet loss comparison
-    loss_cols = [c for c in ['tcp_dl_packet_loss_pct', 'tcp_ul_packet_loss_pct', 'udp_dl_packet_loss_pct', 'udp_ul_packet_loss_pct'] if c in df.columns]
+    # Packet loss comparison (UDP only - TCP doesn't provide packet loss)
+    loss_cols = [c for c in ['udp_dl_packet_loss_pct', 'udp_ul_packet_loss_pct'] if c in df.columns]
     if loss_cols:
         loss_df = df[['label'] + loss_cols].melt(id_vars='label', var_name='metric', value_name='pct')
         plt.figure(figsize=(10, 6))
         sns.barplot(data=loss_df, x='label', y='pct', hue='metric')
-        plt.title('Packet loss comparison (%)')
+        plt.title('Packet loss comparison (%) - UDP only')
         plt.xticks(rotation=45, ha='right')
         plt.tight_layout()
         loss_png = os.path.join(outdir, 'packet_loss_comparison.png')
