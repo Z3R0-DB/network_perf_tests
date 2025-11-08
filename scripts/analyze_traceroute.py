@@ -16,6 +16,11 @@ import matplotlib.pyplot as plt
 import networkx as nx
 import numpy as np
 
+# Layout spacing constant for network graph visualization.
+# Controls optimal distance between nodes in spring layout.
+# Value chosen to improve readability and spacing in complex topologies.
+LAYOUT_SPACING = 3.0
+
 
 # Regex to parse traceroute lines
 # Format: " 1  gateway (192.168.1.1)  1.234 ms  1.456 ms  1.789 ms"
@@ -89,7 +94,11 @@ def classify_node(ip, hostname):
         return 'unknown'
     
     # Private IP ranges (LAN)
-    if ip.startswith('192.168.') or ip.startswith('10.') or ip.startswith('172.'):
+    if (
+        ip.startswith('192.168.') or
+        ip.startswith('10.') or
+        re.match(r'^172\.(1[6-9]|2[0-9]|3[0-1])\.', ip)
+    ):
         if 'gateway' in hostname.lower() or ip.endswith('.1'):
             return 'gateway'
         return 'lan'
@@ -224,7 +233,7 @@ def build_network_graph(traceroute_results):
             if source != target:
                 if not G.has_edge(source, target):
                     G.add_edge(source, target, paths=[])
-                G[source][target]['paths'].append({
+            G[source][target]['paths'].append({
                 'artifact': result['artifact'],
                 'target_type': result['target_type'],
                 'hop_num': len(result['hops']) + 1,
@@ -318,12 +327,8 @@ def visualize_network_graph(G, outdir):
     
     # Calculate node degrees to identify highly connected nodes
     node_degrees = dict(G.degree())
-    
-    # Use improved spring layout with better spacing
-    # Increase k (optimal distance between nodes) and iterations for better spacing
-    # Weight highly connected nodes to push them further apart
     pos = nx.spring_layout(G, 
-                          k=3.0,  # Increased from 2 for more spacing
+                          k=LAYOUT_SPACING,  # Use named constant for spacing
                           iterations=100,  # Increased from 50 for better convergence
                           seed=42,
                           weight='weight')

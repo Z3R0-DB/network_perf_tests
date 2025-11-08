@@ -147,7 +147,7 @@ def analyze_artifacts(root):
             v = parse_iperf_json(iperf_tcp_dl[0])
             if v:
                 row["tcp_dl_mbps"] = v.get("mbps")
-                # TCP doesn't provide jitter/loss metrics - only bandwidth
+                # TCP doesn't provide jitter/loss metrics - only bandwidth. TCP uses reliable delivery with retransmissions, so packet loss is handled transparently.
         if iperf_tcp_ul:
             v = parse_iperf_json(iperf_tcp_ul[0])
             if v:

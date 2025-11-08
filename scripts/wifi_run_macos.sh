@@ -110,7 +110,7 @@ fi
 
 # Set up loop variables
 if [[ $LOOP_MINUTES -gt 0 ]]; then
-  END_TIME=$(date -u -v+${LOOP_MINUTES}M +%s)
+  END_TIME=$(date -u -v+"${LOOP_MINUTES}M" +%s)
   ITERATION=1
   log "Loop mode enabled: running tests for ${LOOP_MINUTES} minutes with ${LOOP_INTERVAL}s intervals"
 else
@@ -156,6 +156,10 @@ WLAN_SUMMARY_FILE="${OUTDIR}/wlan_${TESTID}_${TS}_summary.json"
 ACTIVE_IF=$(route -n get default 2>/dev/null | awk '/interface:/ {print $2}') || true
 INTERFACE_NAME=""
 INTERFACE_TYPE=""
+
+if [[ -z "$ACTIVE_IF" ]]; then
+  log "Warning: No active network interface detected (no default route). Connectivity issues may occur."
+fi
 
 if [[ -n "$ACTIVE_IF" ]]; then
   # Get friendly name and type from networksetup
@@ -232,9 +236,10 @@ log "Running tests against server ${SERVER} for ${DURATION}s, UDP=${UDP_M} Mbps"
 
 # --- Traceroutes (run before bandwidth tests) ---
 log "Running traceroute to server ${SERVER}"
-# Use perl one-liner for timeout on macOS (timeout command not available by default)
-perl -e 'alarm shift; exec @ARGV' 60 traceroute -m 20 -q 2 -w 2 "$SERVER" > "${OUTDIR}/traceroute_${TESTID}_${TS}_server.txt" 2>&1 || true
-log "Traceroute to server finished: ${OUTDIR}/traceroute_${TESTID}_${TS}_server.txt"
+# Note: macOS does not include the 'timeout' command by default, so we use Perl's alarm for a timeout.
+log "Running traceroute to WAN target 8.8.8.8"
+perl -e 'alarm shift; exec @ARGV' 60 traceroute -m 20 -q 2 -w 2 8.8.8.8 > "${OUTDIR}/traceroute_${TESTID}_${TS}_wan.txt" 2>&1 || true
+log "Traceroute to WAN finished: ${OUTDIR}/traceroute_${TESTID}_${TS}_wan.txt"
 
 log "Running traceroute to WAN target 8.8.8.8"
 perl -e 'alarm shift; exec @ARGV' 60 traceroute -m 20 -q 2 -w 2 8.8.8.8 > "${OUTDIR}/traceroute_${TESTID}_${TS}_wan.txt" 2>&1 || true
@@ -311,10 +316,10 @@ if [[ $LOOP_MINUTES -gt 0 ]]; then
       log "Loop duration reached. Exiting after ${ITERATION} iterations."
       break
     fi
-    
     REMAINING_MINUTES=$(( (END_TIME - CURRENT_TIME) / 60 ))
-    log "=== Iteration ${ITERATION}/${REMAINING_MINUTES}min remaining ==="
+    log "=== Iteration ${ITERATION} (${REMAINING_MINUTES}min remaining) ==="
     
+    run_single_test $ITERATION
     run_single_test $ITERATION
     
     ITERATION=$((ITERATION + 1))
