@@ -50,13 +50,11 @@ Make it executable and run it (example):
 
 ```bash
 chmod +x scripts/wifi_run_macos.sh
-./scripts/wifi_run_macos.sh --server iperf.he.net --test-id macbook_wifi --run-name testA --duration 30 --udp-target-mbps 100 --verbose
 ```
 
 To automatically generate plots after the test completes, use the `--auto-plot` flag. This requires the Python analysis dependencies from `requirements.txt` (pandas, matplotlib, seaborn):
 
 ```bash
-pip3 install -r network_perf_tests/requirements.txt
 ./scripts/wifi_run_macos.sh --server iperf.he.net --test-id macbook_wifi --run-name testA --duration 30 --udp-target-mbps 100 --verbose --auto-plot
 ```
 
