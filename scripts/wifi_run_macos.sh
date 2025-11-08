@@ -81,9 +81,9 @@ while [[ $# -gt 0 ]]; do
     --test-id) TESTID="$2"; shift 2;;
     --duration) DURATION="$2"; shift 2;;
     --udp-target-mbps) UDP_M="$2"; shift 2;;
-  --run-name) RUN_NAME="$2"; shift 2;;
-  --verbose) VERBOSE=1; shift 1;;
-  --auto-plot) AUTO_PLOT=1; shift 1;;
+    --run-name) RUN_NAME="$2"; shift 2;;
+    --verbose) VERBOSE=1; shift 1;;
+    --auto-plot) AUTO_PLOT=1; shift 1;;
     -h|--help) usage;;
     *) echo "Unknown arg: $1"; usage;;
   esac
@@ -112,81 +112,97 @@ mkdir -p "$OUTDIR"
 
 log "Starting test run. server=${SERVER}, test_id=${TESTID}, run_name=${RUN_NAME}, duration=${DURATION}, udp_target_mbps=${UDP_M}"
 
-# capture wifi state (macOS) and parse key metrics
-AIRPORT="/System/Library/PrivateFrameworks/Apple80211.framework/Versions/Current/Resources/airport"
+# capture network interface state (macOS) - works for both WiFi and Ethernet
 WLAN_RAW_FILE="${OUTDIR}/wlan_${TESTID}_${TS}.txt"
 WLAN_SUMMARY_FILE="${OUTDIR}/wlan_${TESTID}_${TS}_summary.json"
 
-if [[ -x "$AIRPORT" ]]; then
-  RAW=$($AIRPORT -I 2>/dev/null || true)
+# Detect the active network interface
+ACTIVE_IF=$(route -n get default 2>/dev/null | awk '/interface:/ {print $2}') || true
+INTERFACE_NAME=""
+INTERFACE_TYPE=""
+
+if [[ -n "$ACTIVE_IF" ]]; then
+  # Get friendly name and type from networksetup
+  INTERFACE_INFO=$(networksetup -listallhardwareports 2>/dev/null | grep -B 1 "Device: ${ACTIVE_IF}" | head -1) || true
+  INTERFACE_NAME=$(echo "$INTERFACE_INFO" | sed 's/Hardware Port: //' || true)
+  
+  # Determine interface type
+  if [[ "$INTERFACE_NAME" =~ "Wi-Fi" ]]; then
+    INTERFACE_TYPE="wifi"
+  elif [[ "$INTERFACE_NAME" =~ "Ethernet" ]] || [[ "$INTERFACE_NAME" =~ "USB" ]] || [[ "$INTERFACE_NAME" =~ "Thunderbolt" ]]; then
+    INTERFACE_TYPE="ethernet"
+  else
+    INTERFACE_TYPE="other"
+  fi
+fi
+
+# Try wdutil for WiFi info, otherwise collect basic interface info
+if [[ "$INTERFACE_TYPE" == "wifi" ]] && command -v wdutil >/dev/null 2>&1; then
+  RAW=$(sudo -n wdutil info 2>/dev/null || wdutil info 2>/dev/null || true)
   echo "$RAW" > "$WLAN_RAW_FILE"
-  log "Captured WLAN raw output to ${WLAN_RAW_FILE}"
+  log "Captured WiFi output to ${WLAN_RAW_FILE} (using wdutil)"
 
-  # Extract common keys (agrCtlRSSI or RSSI), agrCtlNoise, lastTxRate, channel, SSID, BSSID
-  # RSSI and SNR collection temporarily disabled per request.
-  # RSSI=$(echo "$RAW" | awk -F": " '/agrCtlRSSI|RSSI:/ {print $2; exit}') || true
-  # NOISE=$(echo "$RAW" | awk -F": " '/agrCtlNoise|Noise:/ {print $2; exit}') || true
-  LASTTX=$(echo "$RAW" | awk -F": " '/lastTxRate/ {print $2; exit}') || true
-  CHANNEL=$(echo "$RAW" | awk -F": " '/channel/ {print $2; exit}') || true
-  SSID=$(echo "$RAW" | sed -n 's/^ *SSID: *//p' | head -n1 || true)
-  BSSID=$(echo "$RAW" | awk -F": " '/BSSID/ {print $2; exit}') || true
+  # Extract WiFi-specific info from wdutil output
+  SSID=$(echo "$RAW" | awk '/^[[:space:]]*SSID[[:space:]]*:/ {gsub(/^[[:space:]]*SSID[[:space:]]*:[[:space:]]*/, ""); print; exit}') || true
+  BSSID=$(echo "$RAW" | awk '/^[[:space:]]*BSSID[[:space:]]*:/ {gsub(/^[[:space:]]*BSSID[[:space:]]*:[[:space:]]*/, ""); print; exit}') || true
+  LASTTX=$(echo "$RAW" | awk '/^[[:space:]]*Tx Rate[[:space:]]*:/ {print $4; exit}') || true
+  CHANNEL=$(echo "$RAW" | awk '/^[[:space:]]*Channel[[:space:]]*:/ {gsub(/^[[:space:]]*Channel[[:space:]]*:[[:space:]]*/, ""); print; exit}') || true
 
-  # normalize numeric values
-  RSSI_VAL=""
-  NOISE_VAL=""
-  if [[ -n "$RSSI" ]]; then RSSI_VAL=$(echo "$RSSI" | tr -d '\r') || true; fi
-  # if [[ -n "$NOISE" ]]; then NOISE_VAL=$(echo "$NOISE" | tr -d '\r') || true; fi
-
-  # compute signal percent (rough heuristic) and SNR
-  SIGNAL_PCT="null"
-  # RSSI_VAL and SNR computations commented out temporarily.
-  # RSSI_VAL=""
-  # if [[ -n "$RSSI" ]]; then RSSI_VAL=$(echo "$RSSI" | tr -d '\r') || true; fi
-  # SNR="null"
-  # if [[ -n "$RSSI_VAL" && -n "$NOISE_VAL" ]]; then
-  #   RSSI_INT=$(echo "$RSSI_VAL" | awk '{print int($0)}')
-  #   NOISE_INT=$(echo "$NOISE_VAL" | awk '{print int($0)}')
-  #   if [[ $RSSI_INT -ge -50 ]]; then
-  #     SIGNAL_PCT=100
-  #   elif [[ $RSSI_INT -le -100 ]]; then
-  #     SIGNAL_PCT=0
-  #   else
-  #     SIGNAL_PCT=$((2*(RSSI_INT + 100)))
-  #   fi
-  #   SNR=$((RSSI_INT - NOISE_INT))
-  # elif [[ -n "$RSSI_VAL" ]]; then
-  #   RSSI_INT=$(echo "$RSSI_VAL" | awk '{print int($0)}')
-  #   if [[ $RSSI_INT -ge -50 ]]; then
-  #     SIGNAL_PCT=100
-  #   elif [[ $RSSI_INT -le -100 ]]; then
-  #     SIGNAL_PCT=0
-  #   else
-  #     SIGNAL_PCT=$((2*(RSSI_INT + 100)))
-  #   fi
-  # fi
+  cat > "$WLAN_SUMMARY_FILE" <<JSON
+{
   "timestamp": "${TS}",
   "test_id": "${TESTID}",
+  "interface_name": "${INTERFACE_NAME}",
+  "interface_type": "${INTERFACE_TYPE}",
+  "interface_device": "${ACTIVE_IF}",
   "ssid": "${SSID}",
   "bssid": "${BSSID}",
-  # "rssi": ${RSSI_VAL:-null},
-  # "noise": ${NOISE_VAL:-null},
-  # "snr": ${SNR},
-  # "signal_percent": ${SIGNAL_PCT},
   "last_tx_rate_mbps": "${LASTTX}",
   "channel": "${CHANNEL}"
 }
 JSON
-  log "WLAN summary written to ${WLAN_SUMMARY_FILE}"
+  log "Network interface summary written to ${WLAN_SUMMARY_FILE}"
 else
-  echo "airport utility not found. Falling back to networksetup/ifconfig output."
+  # For Ethernet or when wdutil unavailable, collect basic interface info
   networksetup -listallhardwareports > "$WLAN_RAW_FILE" 2>/dev/null || true
-  ifconfig > "${OUTDIR}/ifconfig_${TESTID}_${TS}.txt" 2>/dev/null || true
+  ifconfig "$ACTIVE_IF" >> "$WLAN_RAW_FILE" 2>/dev/null || true
+  
+  # Get MAC address and link speed if available
+  MAC_ADDR=$(ifconfig "$ACTIVE_IF" 2>/dev/null | awk '/ether/ {print $2}') || true
+  LINK_SPEED=$(networksetup -getMedia "$INTERFACE_NAME" 2>/dev/null | grep "Active:" | awk '{print $2}') || true
+  
+  cat > "$WLAN_SUMMARY_FILE" <<JSON
+{
+  "timestamp": "${TS}",
+  "test_id": "${TESTID}",
+  "interface_name": "${INTERFACE_NAME}",
+  "interface_type": "${INTERFACE_TYPE}",
+  "interface_device": "${ACTIVE_IF}",
+  "mac_address": "${MAC_ADDR}",
+  "link_speed": "${LINK_SPEED}",
+  "ssid": "",
+  "bssid": "",
+  "last_tx_rate_mbps": "",
+  "channel": ""
+}
+JSON
+  log "Network interface summary written to ${WLAN_SUMMARY_FILE}"
 fi
 
 # compute ping count ≈5Hz
 PING_COUNT=$((DURATION * 5))
 
 log "Running tests against server ${SERVER} for ${DURATION}s, UDP=${UDP_M} Mbps"
+
+# --- Traceroutes (run before bandwidth tests) ---
+log "Running traceroute to server ${SERVER}"
+# Use perl one-liner for timeout on macOS (timeout command not available by default)
+perl -e 'alarm shift; exec @ARGV' 60 traceroute -m 20 -q 2 -w 2 "$SERVER" > "${OUTDIR}/traceroute_${TESTID}_${TS}_server.txt" 2>&1 || true
+log "Traceroute to server finished: ${OUTDIR}/traceroute_${TESTID}_${TS}_server.txt"
+
+log "Running traceroute to WAN target 8.8.8.8"
+perl -e 'alarm shift; exec @ARGV' 60 traceroute -m 20 -q 2 -w 2 8.8.8.8 > "${OUTDIR}/traceroute_${TESTID}_${TS}_wan.txt" 2>&1 || true
+log "Traceroute to WAN finished: ${OUTDIR}/traceroute_${TESTID}_${TS}_wan.txt"
 
 echo "Starting iperf tests..."
 
