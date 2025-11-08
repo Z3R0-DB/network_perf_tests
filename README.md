@@ -327,7 +327,13 @@ python3 scripts/analyze_traceroute.py \
 ```
 
 #### Topology Report Features
-- **Network Graph Visualization**: Color-coded nodes by type (client, LAN, gateway, radio, satellite, ISP, WAN)
+- **Network Graph Visualization**: Color-coded nodes by type (client, LAN, gateway, radio, satellite, ISP, WAN, iperf server)
+- **Edge Latency Display**: Average RTT shown on connection lines between nodes
+- **Traffic Flow Indicators**: 
+  - Arrows show direction of data flow
+  - Line thickness indicates usage frequency (thicker = more frequently used)
+  - Usage count displayed on edges (e.g., "2x" means used twice)
+  - Color-coded by usage: light gray (single use), medium gray (dual use), dark gray (heavy use 3+)
 - **Hop-by-Hop Analysis**: Detailed latency at each hop
 - **Path Summary**: Number of hops, total nodes, unique paths
 - **Node Classification**: Automatic identification of network segments
@@ -340,6 +346,8 @@ python3 scripts/analyze_traceroute.py \
 - 🔴 **Satellite**: Viasat or other satellite terminals
 - 🟣 **ISP**: Internet service provider infrastructure
 - ⚫ **WAN**: Internet backbone and destination servers
+- 🟨 **iperf Server**: The iperf3 server endpoint being tested (highlighted in gold)
+- 💗 **Endpoint**: Final destinations like DNS servers (8.8.8.8) or other test targets (highlighted in deep pink)
 
 ## Advanced Features
 
