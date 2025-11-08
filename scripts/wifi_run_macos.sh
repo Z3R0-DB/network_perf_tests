@@ -5,8 +5,12 @@ usage() {
   cat <<EOF
 Usage: $0 --server SERVER --test-id ID [--duration N] [--udp-target-mbps M]
 Defaults: duration=30, udp-target-mbps=100
+Options:
+  --loop-minutes N       Run tests continuously for N minutes
+  --loop-interval N      Wait N seconds between test iterations (default: 60)
 Example:
   $0 --server iperf.he.net --test-id macbook_wifi --duration 10 --udp-target-mbps 50
+  $0 --server iperf.he.net --test-id macbook_wifi --loop-minutes 120 --loop-interval 30 --verbose --auto-plot
 EOF
   exit 1
 }
@@ -17,6 +21,8 @@ UDP_M=100
 RUN_NAME=""
 VERBOSE=0
 AUTO_PLOT=0
+LOOP_MINUTES=0
+LOOP_INTERVAL=60
 
 log() {
   if [[ $VERBOSE -eq 1 ]]; then
@@ -84,6 +90,8 @@ while [[ $# -gt 0 ]]; do
     --run-name) RUN_NAME="$2"; shift 2;;
     --verbose) VERBOSE=1; shift 1;;
     --auto-plot) AUTO_PLOT=1; shift 1;;
+    --loop-minutes) LOOP_MINUTES="$2"; shift 2;;
+    --loop-interval) LOOP_INTERVAL="$2"; shift 2;;
     -h|--help) usage;;
     *) echo "Unknown arg: $1"; usage;;
   esac
@@ -100,17 +108,45 @@ if [[ -z "$IPERF" ]]; then
   exit 2
 fi
 
-TS=$(date +%Y%m%d_%H%M%S)
-BASE_RESULTS_DIR="results"
-mkdir -p "$BASE_RESULTS_DIR"
-if [[ -n "$RUN_NAME" ]]; then
-  OUTDIR="${BASE_RESULTS_DIR}/artifacts_${TESTID}_${RUN_NAME}_${TS}"
+# Set up loop variables
+if [[ $LOOP_MINUTES -gt 0 ]]; then
+  END_TIME=$(date -u -v+${LOOP_MINUTES}M +%s)
+  ITERATION=1
+  log "Loop mode enabled: running tests for ${LOOP_MINUTES} minutes with ${LOOP_INTERVAL}s intervals"
 else
-  OUTDIR="${BASE_RESULTS_DIR}/artifacts_${TESTID}_${TS}"
+  END_TIME=0
+  ITERATION=0
 fi
-mkdir -p "$OUTDIR"
 
-log "Starting test run. server=${SERVER}, test_id=${TESTID}, run_name=${RUN_NAME}, duration=${DURATION}, udp_target_mbps=${UDP_M}"
+# Main test execution function
+run_single_test() {
+  local iteration=$1
+  
+  TS=$(date +%Y%m%d_%H%M%S)
+  BASE_RESULTS_DIR="results"
+  mkdir -p "$BASE_RESULTS_DIR"
+  
+  # Auto-generate run name if in loop mode and no custom run name provided
+  if [[ $LOOP_MINUTES -gt 0 ]] && [[ -z "$RUN_NAME" ]]; then
+    EFFECTIVE_RUN_NAME="test${iteration}"
+  elif [[ -n "$RUN_NAME" ]]; then
+    if [[ $LOOP_MINUTES -gt 0 ]]; then
+      EFFECTIVE_RUN_NAME="${RUN_NAME}${iteration}"
+    else
+      EFFECTIVE_RUN_NAME="$RUN_NAME"
+    fi
+  else
+    EFFECTIVE_RUN_NAME=""
+  fi
+  
+  if [[ -n "$EFFECTIVE_RUN_NAME" ]]; then
+    OUTDIR="${BASE_RESULTS_DIR}/artifacts_${TESTID}_${EFFECTIVE_RUN_NAME}_${TS}"
+  else
+    OUTDIR="${BASE_RESULTS_DIR}/artifacts_${TESTID}_${TS}"
+  fi
+  mkdir -p "$OUTDIR"
+
+  log "Starting test run #${iteration}. server=${SERVER}, test_id=${TESTID}, run_name=${EFFECTIVE_RUN_NAME}, duration=${DURATION}, udp_target_mbps=${UDP_M}"
 
 # capture network interface state (macOS) - works for both WiFi and Ethernet
 WLAN_RAW_FILE="${OUTDIR}/wlan_${TESTID}_${TS}.txt"
@@ -264,4 +300,38 @@ if [[ $AUTO_PLOT -eq 1 ]]; then
   else
     log "python3 not found in PATH; cannot run auto-plot"
   fi
+fi
+}
+
+# Execute tests - either single run or loop mode
+if [[ $LOOP_MINUTES -gt 0 ]]; then
+  while true; do
+    CURRENT_TIME=$(date -u +%s)
+    if [[ $CURRENT_TIME -ge $END_TIME ]]; then
+      log "Loop duration reached. Exiting after ${ITERATION} iterations."
+      break
+    fi
+    
+    REMAINING_MINUTES=$(( (END_TIME - CURRENT_TIME) / 60 ))
+    log "=== Iteration ${ITERATION}/${REMAINING_MINUTES}min remaining ==="
+    
+    run_single_test $ITERATION
+    
+    ITERATION=$((ITERATION + 1))
+    
+    # Check if we have time for another iteration
+    CURRENT_TIME=$(date -u +%s)
+    if [[ $CURRENT_TIME -ge $END_TIME ]]; then
+      log "Loop duration reached. Exiting after test completion."
+      break
+    fi
+    
+    log "Waiting ${LOOP_INTERVAL} seconds before next iteration..."
+    sleep $LOOP_INTERVAL
+  done
+  
+  log "Completed ${ITERATION} test iterations over ${LOOP_MINUTES} minutes"
+else
+  # Single test run
+  run_single_test 1
 fi
