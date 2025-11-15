@@ -14,6 +14,12 @@ from datetime import datetime
 
 import matplotlib.pyplot as plt
 import networkx as nx
+import numpy as np
+
+# Layout spacing constant for network graph visualization.
+# Controls optimal distance between nodes in spring layout.
+# Value chosen to improve readability and spacing in complex topologies.
+LAYOUT_SPACING = 3.0
 
 
 # Regex to parse traceroute lines
@@ -82,13 +88,17 @@ def classify_node(ip, hostname):
     """Classify a network node based on IP address and hostname.
     
     Returns:
-        str: One of 'lan', 'gateway', 'radio', 'satellite', 'isp', 'wan'
+        str: One of 'lan', 'gateway', 'radio', 'satellite', 'isp', 'wan', 'iperf_server'
     """
     if ip == 'timeout':
         return 'unknown'
     
     # Private IP ranges (LAN)
-    if ip.startswith('192.168.') or ip.startswith('10.') or ip.startswith('172.'):
+    if (
+        ip.startswith('192.168.') or
+        ip.startswith('10.') or
+        re.match(r'^172\.(1[6-9]|2[0-9]|3[0-1])\.', ip)
+    ):
         if 'gateway' in hostname.lower() or ip.endswith('.1'):
             return 'gateway'
         return 'lan'
@@ -160,6 +170,7 @@ def build_network_graph(traceroute_results):
     
     # Track all unique nodes and paths
     node_info = {}  # {ip: {'hostname': ..., 'type': ..., 'rtts': []}}
+    iperf_servers = set()  # Track which nodes are iperf server endpoints
     
     for result in traceroute_results:
         source = 'client'  # Starting point
@@ -195,17 +206,45 @@ def build_network_graph(traceroute_results):
             
             source = ip
         
-        # Add edge to final target if we have hops
+        # Add edge to final target if we have hops and target is different from last hop
         if result['hops'] and result['target']:
             target = result['target']
-            if not G.has_edge(source, target):
-                G.add_edge(source, target, paths=[])
+            
+            # Mark targets from 'server' traceroutes as iperf servers
+            if result['target_type'] == 'server':
+                iperf_servers.add(target)
+                # Also add to node_info if not already present
+                if target not in node_info:
+                    node_info[target] = {
+                        'hostname': target,
+                        'type': 'iperf_server',
+                        'rtts': []
+                    }
+            else:
+                # For non-server targets (like DNS), add to node_info if not present
+                if target not in node_info:
+                    node_info[target] = {
+                        'hostname': target,
+                        'type': 'wan',  # Default classification, will be overridden to 'endpoint'
+                        'rtts': []
+                    }
+            
+            # Only add edge if target is different from the last hop (avoid self-loops)
+            if source != target:
+                if not G.has_edge(source, target):
+                    G.add_edge(source, target, paths=[])
             G[source][target]['paths'].append({
                 'artifact': result['artifact'],
                 'target_type': result['target_type'],
                 'hop_num': len(result['hops']) + 1,
                 'rtt_ms': None
             })
+    
+    # Identify endpoint nodes (nodes with no outgoing edges - leaf nodes)
+    endpoint_nodes = set()
+    for node in G.nodes():
+        if node != 'client' and G.out_degree(node) == 0:
+            endpoint_nodes.add(node)
     
     # Add node attributes
     for node in G.nodes():
@@ -215,7 +254,14 @@ def build_network_graph(traceroute_results):
             G.nodes[node]['avg_rtt'] = 0
         elif node in node_info:
             G.nodes[node]['hostname'] = node_info[node]['hostname']
-            G.nodes[node]['type'] = node_info[node]['type']
+            # Override type if this node is an iperf server endpoint
+            if node in iperf_servers:
+                G.nodes[node]['type'] = 'iperf_server'
+            # Mark other endpoint nodes (DNS servers, other test targets)
+            elif node in endpoint_nodes:
+                G.nodes[node]['type'] = 'endpoint'
+            else:
+                G.nodes[node]['type'] = node_info[node]['type']
             rtts = node_info[node]['rtts']
             G.nodes[node]['avg_rtt'] = sum(rtts) / len(rtts) if rtts else 0
     
@@ -224,7 +270,7 @@ def build_network_graph(traceroute_results):
 
 def visualize_network_graph(G, outdir):
     """Create a visualization of the network topology graph."""
-    plt.figure(figsize=(16, 12))
+    plt.figure(figsize=(18, 14))
     
     # Define colors for different node types
     node_colors = {
@@ -235,10 +281,12 @@ def visualize_network_graph(G, outdir):
         'satellite': '#F44336',   # Red
         'isp': '#00BCD4',         # Cyan
         'wan': '#607D8B',         # Gray
+        'iperf_server': '#FFD700', # Gold
+        'endpoint': '#FF1493',    # Deep Pink - for DNS and other test endpoints
         'unknown': '#9E9E9E'      # Light Gray
     }
     
-    # Assign colors and labels
+    # Assign colors and labels with RTT back on nodes
     colors = []
     labels = {}
     for node in G.nodes():
@@ -250,8 +298,23 @@ def visualize_network_graph(G, outdir):
         
         if node == 'client':
             labels[node] = 'Test Computer'
+        elif node_type == 'iperf_server':
+            # iperf server with RTT
+            label = f"iperf Server\n{node}"
+            if avg_rtt > 0:
+                label += f"\n({avg_rtt:.1f}ms)"
+            labels[node] = label
+        elif node_type == 'endpoint':
+            # Other endpoints (DNS, test targets, etc.)
+            if hostname == node or hostname == 'timeout':
+                label = f"Endpoint\n{node}"
+            else:
+                label = f"Endpoint\n{hostname}\n{node}"
+            if avg_rtt > 0:
+                label += f"\n({avg_rtt:.1f}ms)"
+            labels[node] = label
         else:
-            # Create label with hostname/IP and average RTT
+            # Create label with hostname/IP and RTT
             if hostname == node or hostname == 'timeout':
                 label = node
             else:
@@ -262,25 +325,89 @@ def visualize_network_graph(G, outdir):
             
             labels[node] = label
     
-    # Use hierarchical layout
-    pos = nx.spring_layout(G, k=2, iterations=50, seed=42)
+    # Calculate node degrees to identify highly connected nodes
+    node_degrees = dict(G.degree())
+    pos = nx.spring_layout(G, 
+                          k=LAYOUT_SPACING,  # Use named constant for spacing
+                          iterations=100,  # Increased from 50 for better convergence
+                          seed=42,
+                          weight='weight')
     
-    # Draw the graph
+    # Apply additional spacing for highly connected nodes
+    # Nodes with many connections get pushed further from the center
+    center_x = sum(x for x, y in pos.values()) / len(pos)
+    center_y = sum(y for x, y in pos.values()) / len(pos)
+    
+    for node in pos:
+        degree = node_degrees[node]
+        if degree > 3:  # High connectivity threshold
+            # Push away from center based on degree
+            x, y = pos[node]
+            dx = x - center_x
+            dy = y - center_y
+            distance = (dx**2 + dy**2)**0.5
+            if distance > 0:
+                # Scale factor based on degree (more connections = push further)
+                scale = 1.0 + (degree - 3) * 0.15
+                pos[node] = (center_x + dx * scale, center_y + dy * scale)
+    
+    # Prepare edge data: calculate usage count for each edge
+    edge_widths = []
+    edge_colors = []
+    
+    for u, v in G.edges():
+        paths = G[u][v]['paths']
+        
+        # Count how many times this edge was used
+        usage_count = len(paths)
+        
+        # Edge width based on usage count (more usage = thicker line)
+        edge_widths.append(min(1 + usage_count * 0.5, 6))
+        
+        # Edge color based on usage count
+        if usage_count == 1:
+            edge_colors.append('#CCCCCC')  # Light gray for single use
+        elif usage_count == 2:
+            edge_colors.append('#888888')  # Medium gray for dual use
+        else:
+            edge_colors.append('#333333')  # Dark gray for heavy use
+    
+    # Draw edges first (behind nodes) with arrows stopping at node edges
+    # The min_source_margin and min_target_margin ensure arrows stop at node boundary
+    nx.draw_networkx_edges(G, pos, 
+                          edge_color=edge_colors,
+                          arrows=True, 
+                          arrowsize=20, 
+                          width=edge_widths,
+                          alpha=0.7,
+                          connectionstyle='arc3,rad=0.1',
+                          arrowstyle='->',
+                          min_source_margin=25,  # Stop arrow at source node edge
+                          min_target_margin=25)  # Stop arrow at target node edge
+    
+    # Draw nodes on top of edges
     nx.draw_networkx_nodes(G, pos, node_color=colors, node_size=2000, alpha=0.9)
     nx.draw_networkx_labels(G, pos, labels, font_size=8, font_weight='bold')
-    nx.draw_networkx_edges(G, pos, edge_color='gray', arrows=True, 
-                          arrowsize=20, width=2, alpha=0.6,
-                          connectionstyle='arc3,rad=0.1')
     
     # Add legend
     legend_elements = [
-        plt.Line2D([0], [0], marker='o', color='w', label=node_type.capitalize(),
+        plt.Line2D([0], [0], marker='o', color='w', 
+                  label=node_type.replace('_', ' ').capitalize(),
                   markerfacecolor=color, markersize=10)
         for node_type, color in node_colors.items()
     ]
-    plt.legend(handles=legend_elements, loc='upper left', fontsize=10)
     
-    plt.title('Network Topology from Traceroute Analysis', fontsize=16, fontweight='bold')
+    # Add edge usage legend
+    legend_elements.extend([
+        plt.Line2D([0], [0], color='#CCCCCC', linewidth=2, label='Single use path'),
+        plt.Line2D([0], [0], color='#888888', linewidth=3, label='Dual use path'),
+        plt.Line2D([0], [0], color='#333333', linewidth=4, label='Heavy use path (3+)')
+    ])
+    
+    plt.legend(handles=legend_elements, loc='upper left', fontsize=9)
+    
+    plt.title('Network Topology from Traceroute Analysis\n(Latency shown on nodes, line thickness indicates usage frequency)', 
+             fontsize=16, fontweight='bold')
     plt.axis('off')
     plt.tight_layout()
     
@@ -311,6 +438,8 @@ def generate_traceroute_report(traceroute_results, G, outdir):
         .node.satellite {{ border-left-color: #F44336; }}
         .node.isp {{ border-left-color: #00BCD4; }}
         .node.wan {{ border-left-color: #607D8B; }}
+        .node.iperf_server {{ border-left-color: #FFD700; }}
+        .node.endpoint {{ border-left-color: #FF1493; }}
         table {{ width: 100%; border-collapse: collapse; margin: 10px 0; background: white; }}
         th, td {{ padding: 10px; text-align: left; border-bottom: 1px solid #ddd; }}
         th {{ background-color: #2196F3; color: white; }}
@@ -342,6 +471,15 @@ def generate_traceroute_report(traceroute_results, G, outdir):
     html += """
     <div class="summary">
         <h2>Network Topology Visualization</h2>
+        <p><strong>How to read the graph:</strong></p>
+        <ul>
+            <li><strong>Nodes</strong> are color-coded by type (client, gateway, radio, satellite, ISP, WAN, iperf server)</li>
+            <li><strong>Arrows</strong> show the direction of traffic flow</li>
+            <li><strong>Edge labels</strong> show average latency (RTT) in milliseconds</li>
+            <li><strong>Usage count</strong> (e.g., "2x") indicates how many times that path was used</li>
+            <li><strong>Line thickness</strong> indicates frequency of use (thicker = more frequently used)</li>
+            <li><strong>Line color</strong>: Light gray = single use, Medium gray = dual use, Dark gray = heavy use (3+)</li>
+        </ul>
         <img src="network_topology.png" class="topology-img" alt="Network Topology">
     </div>
 """
@@ -364,11 +502,19 @@ def generate_traceroute_report(traceroute_results, G, outdir):
         # Count how many times this node appeared
         appearances = sum(1 for u, v in G.edges() if v == node)
         
+        # Display friendly name for node type
+        if node_type == 'iperf_server':
+            type_display = 'iperf Server'
+        elif node_type == 'endpoint':
+            type_display = 'Endpoint (DNS/Test Target)'
+        else:
+            type_display = node_type.replace('_', ' ').capitalize()
+        
         html += f"""
         <div class="node {node_type}">
             <h3>{hostname}</h3>
             <p><strong>IP:</strong> {node}</p>
-            <p><strong>Type:</strong> {node_type.capitalize()}</p>
+            <p><strong>Type:</strong> {type_display}</p>
             <p><strong>Average RTT:</strong> {avg_rtt:.2f} ms</p>
             <p><strong>Appearances in traces:</strong> {appearances}</p>
         </div>
